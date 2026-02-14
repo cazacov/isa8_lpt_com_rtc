@@ -1,0 +1,82 @@
+GAL22V10
+ISA8DEC
+
+AEN    A0     A3     A4     A5     A6     A7     A8     A9     JUART1 JUART2 GND
+JPRN   UART1  UART2  PRN    RTC    BUFEN  RTCAS  ENPRN  EUART2 EUART1 NC     VCC
+
+; ISA8 LPT/COM/RTC Address Decoder
+; Target: ATF22V10C-15PU (compatible with GAL22V10 fuse map)
+;
+; Pin  1  AEN     - ISA DMA cycle indicator (HIGH during DMA, must be LOW for I/O)
+; Pin  2  A0      - ISA address bit 0 (used for RTC port 0x70 vs 0x71)
+; Pin  3  A3      - ISA address bit 3
+; Pin  4  A4      - ISA address bit 4
+; Pin  5  A5      - ISA address bit 5
+; Pin  6  A6      - ISA address bit 6
+; Pin  7  A7      - ISA address bit 7
+; Pin  8  A8      - ISA address bit 8 (switching bit for all configurable ports)
+; Pin  9  A9      - ISA address bit 9
+; Pin 10  JUART1  - Jumper: UART1 addr select (1=0x3F8, 0=0x2F8)
+; Pin 11  JUART2  - Jumper: UART2 addr select (1=0x3E8, 0=0x2E8)
+; Pin 13  JPRN    - Jumper: PRN addr select   (1=0x378, 0=0x278)
+; Pin 14  UART1   - /UART1_CS output (active low)
+; Pin 15  UART2   - /UART2_CS output (active low)
+; Pin 16  PRN     - /PRN_CS output (active low)
+; Pin 17  RTC     - /RTC_CS output (active low)
+; Pin 18  BUFEN   - /BUF_EN output (active low) - 74HCT245 G#
+; Pin 19  RTCAS   - RTC_AS output (active high) - DS12885 AS
+; Pin 20  ENPRN   - Enable PRN input (active low: LOW=enabled)
+; Pin 21  EUART2  - Enable UART2 input (active low: LOW=enabled)
+; Pin 22  EUART1  - Enable UART1 input (active low: LOW=enabled)
+; Pin 23  NC      - spare
+;
+; Address decode table (A9..A3):
+;   0x3F8 COM1:  1 1 1 1 1 1 1   UART1 when JUART1=1 (A8=1)
+;   0x2F8 COM2:  1 0 1 1 1 1 1   UART1 when JUART1=0 (A8=0)
+;   0x3E8 COM3:  1 1 1 1 1 0 1   UART2 when JUART2=1 (A8=1)
+;   0x2E8 COM4:  1 0 1 1 1 0 1   UART2 when JUART2=0 (A8=0)
+;   0x378 LPT1:  1 1 0 1 1 1 1   PRN   when JPRN=1   (A8=1)
+;   0x278 LPT2:  1 0 0 1 1 1 1   PRN   when JPRN=0   (A8=0)
+;   0x070 RTC:   0 0 0 1 1 1 0   fixed, no jumper
+
+; --- UART1 chip select (active low) ---
+; XNOR(A8, JUART1) expanded: A8*JUART1 + /A8*/JUART1
+/UART1 = /AEN * /EUART1 * A9 *  A8 *  JUART1 * A7 * A6 * A5 * A4 * A3
+       + /AEN * /EUART1 * A9 * /A8 * /JUART1 * A7 * A6 * A5 * A4 * A3
+
+; --- UART2 chip select (active low) ---
+/UART2 = /AEN * /EUART2 * A9 *  A8 *  JUART2 * A7 * A6 * A5 * /A4 * A3
+       + /AEN * /EUART2 * A9 * /A8 * /JUART2 * A7 * A6 * A5 * /A4 * A3
+
+; --- PRN chip select (active low) ---
+/PRN   = /AEN * /ENPRN * A9 *  A8 *  JPRN * /A7 * A6 * A5 * A4 * A3
+       + /AEN * /ENPRN * A9 * /A8 * /JPRN * /A7 * A6 * A5 * A4 * A3
+
+; --- RTC chip select (active low) ---
+; Port 0x70-0x71: A9=0 A8=0 A7=0 A6=1 A5=1 A4=1 A3=0
+; No enable jumper, always active
+/RTC   = /AEN * /A9 * /A8 * /A7 * A6 * A5 * A4 * /A3
+
+; --- 74HCT245 buffer enable (active low) ---
+; Active when any chip select is active
+; Duplicates all CS terms to avoid feedback delay
+/BUFEN = /AEN * /EUART1 * A9 *  A8 *  JUART1 * A7 * A6 * A5 * A4 * A3
+       + /AEN * /EUART1 * A9 * /A8 * /JUART1 * A7 * A6 * A5 * A4 * A3
+       + /AEN * /EUART2 * A9 *  A8 *  JUART2 * A7 * A6 * A5 * /A4 * A3
+       + /AEN * /EUART2 * A9 * /A8 * /JUART2 * A7 * A6 * A5 * /A4 * A3
+       + /AEN * /ENPRN  * A9 *  A8 *  JPRN   * /A7 * A6 * A5 * A4 * A3
+       + /AEN * /ENPRN  * A9 * /A8 * /JPRN   * /A7 * A6 * A5 * A4 * A3
+       + /AEN * /A9 * /A8 * /A7 * A6 * A5 * A4 * /A3
+
+; --- RTC address strobe (active high) ---
+; AS = /A0: HIGH when A0=0 (port 0x70 = address phase)
+;           LOW  when A0=1 (port 0x71 = data phase)
+; DS12885 CS gates this internally
+RTCAS  = /A0
+
+DESCRIPTION
+ISA8 multi-I/O card address decoder.
+Active-low chip selects for UART1, UART2, PRN, RTC.
+Active-low buffer enable for 74HCT245.
+Active-high address strobe for DS12885 RTC.
+Jumper-configurable port addresses and device enable/disable.
