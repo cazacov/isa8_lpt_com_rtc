@@ -50,7 +50,7 @@ This is a KiCad hardware design project for an 8-bit ISA expansion card that pro
 - DB-25 connector
 - Standard Centronics-compatible interface
 - Configurable I/O base address 0x378 or 0x278
-- Interrupt support typically IRQ7 or IRQ5
+- Configurable interrupt IRQ5 or IRQ7
 - CS signal is labeled PRN_CS (active low)
 
 ### 2 x Serial Port (UART)
@@ -87,13 +87,13 @@ Card side (pins 11-18, B1-B8 on the datasheet) connected to data pins of RTC/COM
 DIR pin of 74245 is connected to IOR# (because IOR#=0 on reads → DIR=0 = B→A, and IOR#=1 on writes → DIR=1 = A→B)
 
 ### Address decoding
-Use ATF22V10 to decode port address and generate CS signals, G (enable) signal of 74245. Use additional logic gates if necessary.
+Use ATF22V10 to decode port address and generate CS signals for PRN, UART (and maybe RTC) chips, G (enable) signal of 74245. Use additional logic gates if necessary.
 
 ### Jumpers
 Jumpers allow to select:
 - PRN chip
-  - LPT1 mode - port 0x378, IRQ7
-  - LPT2 mode - port 0x278, IRQ5
+  - port 0x378 or 0x278
+  - IRQ 5 or 7 
 - UART1 chip
   - port 0x3F8 ot 0x2F8
   - IRQ 4 or 3
