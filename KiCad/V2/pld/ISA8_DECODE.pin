@@ -11,19 +11,19 @@
    7   | A7       | Input
    8   | A8       | Input
    9   | A9       | Input
-  10   | JUART1   | Input
-  11   | JUART2   | Input
+  10   | JCOM1    | Input
+  11   | JCOM2    | Input
   12   | GND      | GND
   13   | JPRN     | Input
-  14   | UART1    | Output
-  15   | UART2    | Output
+  14   | COM1     | Output
+  15   | COM2     | Output
   16   | PRN      | Output
   17   | RTC      | Output
   18   | BUFEN    | Output
   19   | RTCAS    | Output
   20   | ENPRN    | Input
-  21   | EUART2   | Input
-  22   | EUART1   | Input
+  21   | ECOM2    | Input
+  22   | ECOM1    | Input
   23   | NC       | NC
   24   | VCC      | VCC
 

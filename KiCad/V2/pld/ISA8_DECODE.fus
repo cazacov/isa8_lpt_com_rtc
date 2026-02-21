@@ -14,7 +14,7 @@ Pin 23 = NC           S0 = 0   S1 = 0
   8  xxxx xxxx xxxx xxxx xxxx xxxx xxxx xxxx xxxx xxxx xxxx
   9  xxxx xxxx xxxx xxxx xxxx xxxx xxxx xxxx xxxx xxxx xxxx
 
-Pin 22 = EUART1       S0 = 0   S1 = 1
+Pin 22 = ECOM1        S0 = 0   S1 = 1
  10  xxxx xxxx xxxx xxxx xxxx xxxx xxxx xxxx xxxx xxxx xxxx
  11  xxxx xxxx xxxx xxxx xxxx xxxx xxxx xxxx xxxx xxxx xxxx
  12  xxxx xxxx xxxx xxxx xxxx xxxx xxxx xxxx xxxx xxxx xxxx
@@ -27,7 +27,7 @@ Pin 22 = EUART1       S0 = 0   S1 = 1
  19  xxxx xxxx xxxx xxxx xxxx xxxx xxxx xxxx xxxx xxxx xxxx
  20  xxxx xxxx xxxx xxxx xxxx xxxx xxxx xxxx xxxx xxxx xxxx
 
-Pin 21 = EUART2       S0 = 0   S1 = 1
+Pin 21 = ECOM2        S0 = 0   S1 = 1
  21  xxxx xxxx xxxx xxxx xxxx xxxx xxxx xxxx xxxx xxxx xxxx
  22  xxxx xxxx xxxx xxxx xxxx xxxx xxxx xxxx xxxx xxxx xxxx
  23  xxxx xxxx xxxx xxxx xxxx xxxx xxxx xxxx xxxx xxxx xxxx
@@ -129,7 +129,7 @@ Pin 16 = PRN          S0 = 0   S1 = 1
 109  xxxx xxxx xxxx xxxx xxxx xxxx xxxx xxxx xxxx xxxx xxxx
 110  xxxx xxxx xxxx xxxx xxxx xxxx xxxx xxxx xxxx xxxx xxxx
 
-Pin 15 = UART2        S0 = 0   S1 = 1
+Pin 15 = COM2         S0 = 0   S1 = 1
 111  ---- ---- ---- ---- ---- ---- ---- ---- ---- ---- ----
 112  -x-- ---- x--x -x-- x--- x--- x--- x--- x--- ---- x---
 113  -x-- ---- x--x -x-- x--- x--- x--- -x-- x--- ---- -x--
@@ -142,7 +142,7 @@ Pin 15 = UART2        S0 = 0   S1 = 1
 120  xxxx xxxx xxxx xxxx xxxx xxxx xxxx xxxx xxxx xxxx xxxx
 121  xxxx xxxx xxxx xxxx xxxx xxxx xxxx xxxx xxxx xxxx xxxx
 
-Pin 14 = UART1        S0 = 0   S1 = 1
+Pin 14 = COM1         S0 = 0   S1 = 1
 122  ---- ---- ---- ---- ---- ---- ---- ---- ---- ---- ----
 123  -x-- ---x x--- x--- x--- x--- x--- x--- x--- x--- ----
 124  -x-- ---x x--- x--- x--- x--- x--- -x-- x--- -x-- ----

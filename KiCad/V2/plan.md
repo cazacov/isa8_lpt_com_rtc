@@ -5,32 +5,32 @@
 | ISA Signal | Direction | Purpose |
 |---|---|---|
 | D0-D7 | Bidir | Data bus (active via 74245) |
-| A0-A9 | In | Address bus (only A0-A9 needed, highest port 0x3F8 = 0b01_1111_1000) |
+| A0-A9 | In | Address bus (only A0-A9 needed, highest port 0x3F8 = 0b11_1111_1000) |
 | AEN | In | DMA cycle indicator. Must be LOW for valid CPU I/O cycle |
 | IOR# | In | I/O Read strobe (active low) |
 | IOW# | In | I/O Write strobe (active low) |
-| IRQ3-IRQ7 | Out | Interrupt request lines (directly active high, directly active low when no IRQ pending) |
+| IRQ3-IRQ7 | Out | Interrupt request lines (active high) |
 | RESET DRV | In | System reset |
 
 ## 2. I/O Port Address Map
 
 | Device | Option A (Default) | Option B | Address Range Size |
 |---|---|---|---|
-| UART1 (COM1) | 0x3F8-0x3FF | 0x2F8-0x2FF (COM2) | 8 bytes |
-| UART2 (COM3) | 0x3E8-0x3EF | 0x2E8-0x2EF (COM4) | 8 bytes |
+| COM1 | 0x3F8-0x3FF | 0x2F8-0x2FF | 8 bytes |
+| COM2 | 0x3E8-0x3EF | 0x2E8-0x2EF | 8 bytes |
 | PRN (LPT1) | 0x378-0x37F | 0x278-0x27F (LPT2) | 8 bytes |
 | RTC | 0x70-0x71 | (fixed) | 2 bytes |
 
 ### Address Bit Patterns (A9..A0)
 
 ```
-UART1 @ 0x3F8:  11 1111 1xxx    UART1 @ 0x2F8:  10 1111 1xxx
-UART2 @ 0x3E8:  11 1110 1xxx    UART2 @ 0x2E8:  10 1110 1xxx
-PRN   @ 0x378:  01 1011 1xxx    PRN   @ 0x278:  00 1001 11xxx
+COM1 @ 0x3F8:  11 1111 1xxx    COM1 @ 0x2F8:  10 1111 1xxx
+COM2 @ 0x3E8:  11 1110 1xxx    COM2 @ 0x2E8:  10 1110 1xxx
+PRN   @ 0x378:  11 0111 1xxx    PRN   @ 0x278:  10 0111 1xxx
 RTC   @ 0x070:  00 0111 000x    (fixed, no jumper)
 ```
 
-Note: `x` bits are don't-care for chip-select (directly decoded by each device's A0-A2 or internal addressing).
+Note: `x` bits are don't-care for chip-select (decoded internally by each device via A0-A2).
 
 ## 3. Jumper Design
 
@@ -38,20 +38,20 @@ Note: `x` bits are don't-care for chip-select (directly decoded by each device's
 
 Instead of feeding raw address lines and muxing them inside the PLD, use jumpers to route one of two address lines to a single PLD input. This minimizes PLD pin usage.
 
-The key observation: for each device pair, only **one address bit** changes between Option A and Option B:
+The key observation: for each device pair, only **one address bit** changes between Option A and Option B — and that bit is always **A8**:
 
 | Device | Option A | Option B | Differing Bit |
 |---|---|---|---|
-| UART1 | 0x3F8 (A9=1) | 0x2F8 (A9=0) | A9 |
-| UART2 | 0x3E8 (A9=1) | 0x2E8 (A9=0) | A9 |
-| PRN | 0x378 (A9=0, A8=1) | 0x278 (A9=0, A8=0) | A8 |
+| COM1 | 0x3F8 (A8=1) | 0x2F8 (A8=0) | A8 |
+| COM2 | 0x3E8 (A8=1) | 0x2E8 (A8=0) | A8 |
+| PRN | 0x378 (A8=1) | 0x278 (A8=0) | A8 |
 
-However, UART1 and UART2 share the same differing bit (A9), so a single jumper can't serve both if they need independent selection. But in practice, UART1 at 0x3F8/0x2F8 and UART2 at 0x3E8/0x2E8 can share the A9 jumper only if they are always switched together. The spec implies independent configuration, so we need separate jumper inputs.
+All three devices have A9=1 for both address options. Each device needs its own jumper input to the PLD for independent address configuration.
 
-**Revised approach: one jumper bit per device fed into the PLD.**
+**Approach: one jumper bit per device fed into the PLD.**
 
-- **J_UART1**: 1-bit jumper (HIGH = 0x3F8, LOW = 0x2F8)
-- **J_UART2**: 1-bit jumper (HIGH = 0x3E8, LOW = 0x2E8)
+- **J_COM1**: 1-bit jumper (HIGH = 0x3F8, LOW = 0x2F8)
+- **J_COM2**: 1-bit jumper (HIGH = 0x3E8, LOW = 0x2E8)
 - **J_PRN**: 1-bit jumper (HIGH = 0x378, LOW = 0x278)
 
 These jumper signals connect directly to ATF22V10 inputs. The PLD equations incorporate them.
@@ -60,8 +60,8 @@ These jumper signals connect directly to ATF22V10 inputs. The PLD equations inco
 
 To disable a device completely (nice-to-have from spec):
 
-- **EN_UART1**: jumper, when open (pulled HIGH via resistor) = disabled. When shorted to GND = enabled.
-- **EN_UART2**: same scheme.
+- **EN_COM1**: jumper, when open (pulled HIGH via resistor) = disabled. When shorted to GND = enabled.
+- **EN_COM2**: same scheme.
 - **EN_PRN**: same scheme.
 
 These also go into the ATF22V10 as inputs. When the enable input is HIGH (disabled), the PLD simply never asserts the corresponding CS output.
@@ -72,14 +72,14 @@ IRQ routing does NOT go through the PLD. Use simple 3-pin jumper headers connect
 
 | Jumper | Position 1 | Position 2 | Notes |
 |---|---|---|---|
-| J_IRQ_UART1 | IRQ4 | IRQ3 | Standard COM1=IRQ4, COM2=IRQ3 |
-| J_IRQ_UART2 | IRQ4 | IRQ3 | Standard COM3=IRQ4, COM4=IRQ3 |
+| J_IRQ_COM1 | IRQ4 | IRQ3 | Standard COM1=IRQ4, COM2=IRQ3 |
+| J_IRQ_COM2 | IRQ4 | IRQ3 | Standard COM3=IRQ4, COM4=IRQ3 |
 | J_IRQ_PRN | IRQ7 | IRQ5 | Standard LPT1=IRQ7, LPT2=IRQ5 |
 | J_IRQ_RTC | IRQ7 / IRQ6 / IRQ5 | — | 4-pin header, jumper selects one of 3 |
 
 For the RTC IRQ (3 choices: IRQ5, IRQ6, IRQ7), use a 1x4 pin header:
 ```
-Pin 1: RTC_IRQ (from DS12885 IRQ pin, accent via open-drain pullup)
+Pin 1: RTC_IRQ (from DS12885 IRQ pin, active low with external pull-up)
 Pin 2: IRQ5
 Pin 3: IRQ6
 Pin 4: IRQ7
@@ -90,56 +90,33 @@ A single jumper wire connects Pin 1 to one of Pins 2-4.
 
 | Jumper | Type | Pins | Function |
 |---|---|---|---|
-| JP_UART1_ADDR | 3-pin header | 1=A9, 2=UART1_SEL, 3=VCC | Address: center-to-1 = 0x3F8, center-to-3 = 0x2F8 |
-| JP_UART1_EN | 2-pin header | 1=UART1_EN, 2=GND | Shorted = enabled, open = disabled (pull-up) |
-| JP_UART1_IRQ | 3-pin header | 1=IRQ4, 2=UART1_IRQ, 3=IRQ3 | Select IRQ |
-| JP_UART2_ADDR | 3-pin header | 1=A9, 2=UART2_SEL, 3=VCC | Address: center-to-1 = 0x3E8, center-to-3 = 0x2E8 |
-| JP_UART2_EN | 2-pin header | 1=UART2_EN, 2=GND | Shorted = enabled, open = disabled (pull-up) |
-| JP_UART2_IRQ | 3-pin header | 1=IRQ4, 2=UART2_IRQ, 3=IRQ3 | Select IRQ |
-| JP_PRN_ADDR | 3-pin header | 1=A8, 2=PRN_SEL, 3=VCC | Address: center-to-1 = 0x378, center-to-3 = 0x278 |
+| JP_COM1_ADDR | 3-pin header | 1=VCC, 2=J_COM1, 3=GND | Cap 1-2: 0x3F8 (COM1), Cap 2-3: 0x2F8 (COM2) |
+| JP_COM1_EN | 2-pin header | 1=COM1_EN, 2=GND | Shorted = enabled, open = disabled (pull-up) |
+| JP_COM1_IRQ | 3-pin header | 1=IRQ4, 2=COM1_IRQ, 3=IRQ3 | Select IRQ |
+| JP_COM2_ADDR | 3-pin header | 1=VCC, 2=J_COM2, 3=GND | Cap 1-2: 0x3E8 (COM3), Cap 2-3: 0x2E8 (COM4) |
+| JP_COM2_EN | 2-pin header | 1=COM2_EN, 2=GND | Shorted = enabled, open = disabled (pull-up) |
+| JP_COM2_IRQ | 3-pin header | 1=IRQ4, 2=COM2_IRQ, 3=IRQ3 | Select IRQ |
+| JP_PRN_ADDR | 3-pin header | 1=VCC, 2=J_PRN, 3=GND | Cap 1-2: 0x378 (LPT1), Cap 2-3: 0x278 (LPT2) |
 | JP_PRN_EN | 2-pin header | 1=PRN_EN, 2=GND | Shorted = enabled, open = disabled (pull-up) |
 | JP_PRN_IRQ | 3-pin header | 1=IRQ7, 2=PRN_IRQ, 3=IRQ5 | Select IRQ |
 | JP_RTC_IRQ | 1x4 header | 1=RTC_IRQ, 2=IRQ5, 3=IRQ6, 4=IRQ7 | Jumper wire Pin1 to one of Pin2-4 |
 
-**Note on address jumper wiring (example JP_UART1_ADDR):**
-```
-  Pin 1 ---- A9 (from ISA bus)
-  Pin 2 ---- UART1_SEL (to ATF22V10 input)
-  Pin 3 ---- VCC (+5V)
-```
-- Jumper on Pin1-Pin2: UART1_SEL follows A9 → PLD sees A9 → matches 0x3F8
-- Jumper on Pin2-Pin3: UART1_SEL = VCC (always HIGH) → PLD treats this as A9=1 equivalent
+**Address jumper wiring (3-pin header):**
 
-Wait - this needs correction. Let me reconsider:
-
-For UART1: 0x3F8 has A9=1, 0x2F8 has A9=0. The PLD needs to match "A9=1" for 0x3F8 or "A9=0" for 0x2F8.
-
-Better approach - feed the jumper output directly as a "configuration bit" into the PLD, and also feed the raw A9 into the PLD. The PLD equation uses XNOR(A9, J_UART1) to check if A9 matches the expected value:
-- J_UART1 = 1 (jumper to VCC): PLD expects A9=1 → 0x3F8
-- J_UART1 = 0 (jumper to GND): PLD expects A9=0 → 0x2F8
-
-This is cleaner. Use simple 2-pin jumpers:
-
-| Jumper | Shorted (to VCC) | Open (pull-down to GND) |
-|---|---|---|
-| J_UART1_ADDR | 0x3F8 (A9 must be 1) | 0x2F8 (A9 must be 0) |
-| J_UART2_ADDR | 0x3E8 (A9 must be 1) | 0x2E8 (A9 must be 0) |
-| J_PRN_ADDR | 0x378 (A8 must be 1) | 0x278 (A8 must be 0) |
-
-Each is a 2-pin header with a pull-down resistor (10k to GND). Jumper cap shorts to VCC for the "A" option.
-
-Alternatively, use standard 3-pin jumpers (VCC / signal / GND):
+All three address jumpers (JP_COM1_ADDR, JP_COM2_ADDR, JP_PRN_ADDR) follow the same scheme:
 
 ```
   Pin 1 = VCC
-  Pin 2 = J_xxx (to PLD input, weak pull-down to GND via 10k)
+  Pin 2 = J_xxx (to PLD input, 10k pull-down to GND)
   Pin 3 = GND
 ```
-- Cap on 1-2: signal = HIGH → Option A
-- Cap on 2-3: signal = LOW → Option B
+- Cap on 1-2: signal = HIGH → Option A (higher address)
+- Cap on 2-3: signal = LOW → Option B (lower address)
 - No cap: signal = LOW (pull-down) → Option B (default)
 
-## 4. ATF22V10 Pin Assignment and Address Decoding
+The PLD equation uses XNOR(A8, J_xxx) to check whether the bus address bit A8 matches the jumper setting.
+
+## 4. ATF22V10 Pin Assignment
 
 ### 4.1 ATF22V10C Pinout (24-pin DIP/PLCC)
 
@@ -161,179 +138,23 @@ Alternatively, use standard 3-pin jumpers (VCC / signal / GND):
 | 7 | Input | A7 | Address bit 7 |
 | 8 | Input | A8 | Address bit 8 |
 | 9 | Input | A9 | Address bit 9 |
-| 10 | Input | J_UART1 | Jumper: UART1 address select (1=0x3F8, 0=0x2F8) |
-| 11 | Input | J_UART2 | Jumper: UART2 address select (1=0x3E8, 0=0x2E8) |
+| 10 | Input | J_COM1 | Jumper: COM1 address select (1=0x3F8, 0=0x2F8) |
+| 11 | Input | J_COM2 | Jumper: COM2 address select (1=0x3E8, 0=0x2E8) |
 | 12 | — | GND | Ground |
 | 13 | Input | J_PRN | Jumper: PRN address select (1=0x378, 0=0x278) |
-| 14 | Output | UART1_CS# | UART1 chip select (active low) |
-| 15 | Output | UART2_CS# | UART2 chip select (active low) |
+| 14 | Output | COM1_CS# | COM1 chip select (active low) |
+| 15 | Output | COM2_CS# | COM2 chip select (active low) |
 | 16 | Output | PRN_CS# | PRN chip select (active low) |
 | 17 | Output | RTC_CS# | RTC chip select (active low) |
 | 18 | Output | BUF_EN# | 74245 enable (active low) |
-| 19 | Output | (spare) | |
+| 19 | Output | RTC_AS | DS12885 Address Strobe (active high = !A0) |
 | 20 | Input | EN_PRN# | PRN enable jumper (0=enabled, active when shorted to GND) |
-| 21 | Input | EN_UART2# | UART2 enable jumper (0=enabled) |
-| 22 | Input | EN_UART1# | UART1 enable jumper (0=enabled) |
+| 21 | Input | EN_COM2# | COM2 enable jumper (0=enabled) |
+| 22 | Input | EN_COM1# | COM1 enable jumper (0=enabled) |
 | 23 | Output | (spare) | |
 | 24 | — | VCC | +5V |
 
 **Note:** A1 and A2 are not needed for chip-select decode — they are decoded internally by each peripheral (UART uses A0-A2, PRN uses A0-A2). We only need A0 for the RTC (which uses port 0x70 and 0x71, differing by A0).
-
-### 4.3 Address Decoding Equations (Active-Low Outputs)
-
-For each device, the chip-select is active when:
-1. AEN = 0 (not a DMA cycle)
-2. The address bits match the selected port range
-3. The device is enabled (EN_xxx# = 0)
-
-#### UART1_CS# (active low)
-
-```
-Port 0x3F8 when J_UART1=1:  A9=1, A8=1, A7=1, A6=1, A5=1, A4=1, A3=1  (0b11_1111_1xxx)
-Port 0x2F8 when J_UART1=0:  A9=0, A8=1, A7=1, A6=1, A5=1, A4=1, A3=1  (0b10_1111_1xxx)
-
-UART1_CS# = !( !AEN & !EN_UART1# & (A9 XNOR J_UART1) & A8 & A7 & A6 & A5 & A4 & A3 )
-
-Expanded (sum-of-products):
-UART1_CS# = !( !AEN & !EN_UART1# & A9 & J_UART1 & A8 & A7 & A6 & A5 & A4 & A3
-             + !AEN & !EN_UART1# & !A9 & !J_UART1 & A8 & A7 & A6 & A5 & A4 & A3 )
-```
-
-#### UART2_CS# (active low)
-
-```
-Port 0x3E8 when J_UART2=1:  A9=1, A8=1, A7=1, A6=1, A5=1, A4=0, A3=1  (0b11_1110_1xxx)
-Port 0x2E8 when J_UART2=0:  A9=0, A8=1, A7=1, A6=1, A5=1, A4=0, A3=1  (0b10_1110_1xxx)
-
-UART2_CS# = !( !AEN & !EN_UART2# & (A9 XNOR J_UART2) & A8 & A7 & A6 & A5 & !A4 & A3 )
-```
-
-#### PRN_CS# (active low)
-
-```
-Port 0x378 when J_PRN=1:  A9=0, A8=1, A7=1, A6=0, A5=1, A4=1, A3=1  (0b01_1011_1xxx)
-Port 0x278 when J_PRN=0:  A9=0, A8=0, A7=1, A6=0, A5=1, A4=1, A3=1  (0b00_1001_11xxx)
-
-Wait — let me recheck:
-0x378 = 0011 0111 1000 → A9=0 A8=1 A7=1 A6=0 A5=1 A4=1 A3=1 A2=0 A1=0 A0=0 (base)
-0x278 = 0010 0111 1000 → A9=0 A8=0 A7=1 A6=0 A5=1 A4=1 A3=1
-
-Differing bit: A8
-
-PRN_CS# = !( !AEN & !EN_PRN# & !A9 & (A8 XNOR J_PRN) & A7 & !A6 & A5 & A4 & A3 )
-```
-
-#### RTC_CS# (active low)
-
-```
-Port 0x70-0x71:  A9=0, A8=0, A7=0, A6=1, A5=1, A4=1, A3=0  (0b00_0111_000x)
-
-RTC_CS# = !( !AEN & !A9 & !A8 & !A7 & A6 & A5 & A4 & !A3 )
-```
-RTC has no enable jumper and no address jumper (fixed at 0x70-0x71).
-
-#### BUF_EN# (74245 active-low enable)
-
-The bus buffer must be active whenever any device on the card is being accessed:
-
-```
-BUF_EN# = UART1_CS# & UART2_CS# & PRN_CS# & RTC_CS#
-
-(i.e., BUF_EN# goes low when any CS# goes low)
-
-Equivalently:
-BUF_EN# = !( !UART1_CS# + !UART2_CS# + !PRN_CS# + !RTC_CS# )
-         = !( !UART1_CS# | !UART2_CS# | !PRN_CS# | !RTC_CS# )
-```
-
-In the PLD, this is simply the OR of all chip-select conditions, then inverted output.
-
-### 4.4 CUPL Source Skeleton
-
-```cupl
-Name     ISA8_DECODE;
-PartNo   01;
-Date     2026-02-14;
-Designer VK;
-Company  ;
-Assembly ;
-Location ;
-Device   g22v10;
-
-/* Inputs */
-Pin 1  = AEN;
-Pin 2  = A0;
-Pin 3  = A3;
-Pin 4  = A4;
-Pin 5  = A5;
-Pin 6  = A6;
-Pin 7  = A7;
-Pin 8  = A8;
-Pin 9  = A9;
-Pin 10 = J_UART1;
-Pin 11 = J_UART2;
-Pin 13 = J_PRN;
-
-/* Active-low enable jumpers (active when LOW = shorted to GND) */
-Pin 22 = !EN_UART1;  /* active low input */
-Pin 21 = !EN_UART2;
-Pin 20 = !EN_PRN;
-
-/* Outputs (directly active-low; directly active-low directly active-low directly active low) */
-Pin 14 = !UART1_CS;
-Pin 15 = !UART2_CS;
-Pin 16 = !PRN_CS;
-Pin 17 = !RTC_CS;
-Pin 18 = !BUF_EN;
-
-/* Intermediate terms */
-FIELD addr = [A9,A8,A7,A6,A5,A4,A3];
-
-/* UART1: 0x3F8 (A9..A3 = 1111111) or 0x2F8 (A9..A3 = 0111111) */
-UART1_CS = !AEN & EN_UART1
-         & ( A9 &  J_UART1 # !A9 & !J_UART1)
-         & A8 & A7 & A6 & A5 & A4 & A3;
-
-/* UART2: 0x3E8 (A9..A3 = 1111011) or 0x2E8 (A9..A3 = 0111011) */  /* Corrected: A9..A3 = x111 0 1 1 → wait */
-/* 0x3E8 = 11 1110 1000  → A9=1 A8=1 A7=1 A6=1 A5=1 A4=0 A3=1 */
-/* 0x2E8 = 10 1110 1000  → A9=0 A8=1 A7=1 A6=1 A5=1 A4=0 A3=1 */
-UART2_CS = !AEN & EN_UART2
-         & ( A9 &  J_UART2 # !A9 & !J_UART2)
-         & A8 & A7 & A6 & A5 & !A4 & A3;
-
-/* PRN: 0x378 (A9..A3 = 0110111) or 0x278 (A9..A3 = 0010111) */
-/* 0x378 = 01 1011 1000  → A9=0 A8=1 A7=1 A6=0 A5=1 A4=1 A3=1 */
-/* 0x278 = 00 1001 11000 → wait, 0x278 = 10 0111 1000 → A9=0 A8=0 A7=1 A6=0 A5=1 A4=1 A3=1 */
-/* Correction: 0x278 = 0010_0111_1000 → only 10 bits: */
-/*   bit9=0 bit8=1 bit7=0 bit6=0 bit5=1 bit4=1 bit3=1 bit2=0 bit1=0 bit0=0 */
-/* Wait, let me redo this carefully: */
-/*   0x278 = 632 decimal. 632 = 512+64+32+16+8 = 0b10_0111_1000 */
-/*   A9=1? No. 0x278 = 2*256+7*16+8 = 512+112+8 = 632 */
-/*   632 = 1001111000 binary (10 bits) → A9=1, A8=0, A7=0, A6=1, A5=1, A4=1, A3=1, A2=0, A1=0, A0=0 */
-/* That doesn't look right either. Let me be very careful: */
-/*   0x278 hex = 2*16^2 + 7*16 + 8 = 512 + 112 + 8 = 632 */
-/*   632 in binary: 512=2^9, 632-512=120, 64=2^6, 120-64=56, 32=2^5, 56-32=24, 16=2^4, 24-16=8, 8=2^3 */
-/*   So: 2^9 + 2^6 + 2^5 + 2^4 + 2^3 = 10_0111_1000 */
-/*   A9=1 A8=0 A7=0 A6=1 A5=1 A4=1 A3=1 */
-
-/* Hmm, but 0x378: 3*256+7*16+8 = 768+112+8 = 888 */
-/*   888 = 512+256+64+32+16+8 = 2^9+2^8+2^6+2^5+2^4+2^3 */
-/*   = 11_0111_1000 */
-/*   A9=1 A8=1 A7=0 A6=1 A5=1 A4=1 A3=1 */
-
-/* So the differing bit between 0x378 and 0x278 is A8 (1 vs 0). A9=1 for both! */
-
-PRN_CS = !AEN & EN_PRN
-       & A9 & (A8 XNOR J_PRN) & !A7 & A6 & A5 & A4 & A3;
-
-/* RTC: 0x70 = 0000_0111_0000 (10 bits: 00_0111_000x) */
-/*   0x70 = 112 = 64+32+16 = 2^6+2^5+2^4 */
-/*   A9=0 A8=0 A7=0 A6=1 A5=1 A4=1 A3=0 */
-RTC_CS = !AEN & !A9 & !A8 & !A7 & A6 & A5 & A4 & !A3;
-
-/* Buffer enable: active when any CS is active */
-BUF_EN = UART1_CS # UART2_CS # PRN_CS # RTC_CS;
-```
 
 ## 5. DS12885 RTC Interface to ISA Bus
 
@@ -347,7 +168,7 @@ Intel bus timing mode is selected by leaving MOT pin unconnected (internal 20k p
 |---|---|---|
 | MOT | Bus mode | Leave unconnected (pulled low internally → Intel mode) |
 | AD0-AD7 | Mux Addr/Data | Connected to card-side data bus (74245 B-side). These are shared address AND data lines. |
-| CS | Chip select | RTC_CS# from ATF22V10 (directly active low already) |
+| CS | Chip select | RTC_CS# from ATF22V10 (active low) |
 | AS | Address strobe | Active-high pulse, directly connected to address latch — see below |
 | DS | Data strobe / OE | Connected to IOR# (active low in Intel mode — acts as output enable for reads) |
 | R/W | Read/Write | Connected to IOW# (active low in Intel mode — acts as write enable; data latched on rising edge) |
@@ -361,62 +182,49 @@ Intel bus timing mode is selected by leaving MOT pin unconnected (internal 20k p
 
 ### 5.3 Multiplexed Address/Data Bus — Address Latch Mechanism
 
-The DS12885 uses a **multiplexed** address/data bus (AD0-AD7). The CPU must first put the register address on the bus, strobe AS, and then perform the data transfer. In a standard IBM AT, the RTC is accessed at ports 0x70 (address register) and 0x71 (data register):
+The DS12885 uses a **multiplexed** address/data bus (AD0-AD7). The CPU first writes a register address to port 0x70, then reads/writes data at port 0x71:
 
-- **Write to port 0x70**: Latches the RTC internal register address (written data goes to the RTC's address latch). The DS12885 expects AS to pulse high, then the data appears as the "address phase."
-- **Read/Write to port 0x71**: Accesses the previously addressed RTC register data.
+- **Port 0x70 (A0=0):** AS pulses HIGH → DS12885 latches AD0–AD7 as the internal register address.
+- **Port 0x71 (A0=1):** AS stays LOW → normal data read/write to the previously addressed register.
 
-**Key insight**: The DS12885's AS (Address Strobe) pin must be pulsed HIGH when the CPU writes to port 0x70, to latch the address. When port 0x71 is accessed, AS stays LOW, and the bus cycle is a normal data read/write.
-
-**Implementation**: Use **A0** (which is 0 for port 0x70 and 1 for port 0x71) to generate AS:
-
-```
-AS = !A0 & RTC_CS_active & IOW_active
-```
-
-More precisely, AS should go HIGH when:
-- The CPU is writing to port 0x70 (A0=0)
-- RTC_CS# is asserted
-
-Since in Intel mode the DS12885 expects:
-- AS rising edge latches the address from AD0-AD7
-- Then DS (connected to IOR#) or R/W (connected to IOW#) performs the data transfer
-
-The simplest approach used in IBM AT designs:
-
-**AS = NOT(A0)**  (directly invert A0, active high when A0=0)
-
-This is gated by CS already (the RTC ignores AS when CS is not asserted). During a write to 0x70, A0=0, so AS=1, and the data on AD0-AD7 is latched as the register address. During access to 0x71, A0=1, so AS=0, and the data transfer occurs normally.
-
-**Implementation**: Use a single inverter gate (one section of a 74HC04) or a spare gate:
-
-```
-RTC_AS = !A0
-```
-
-Connect this directly to the DS12885 AS pin. The RTC's CS pin ensures this only takes effect during RTC cycles.
+**Implementation:** `RTC_AS = !A0` — a simple inverter implemented inside the PLD. Per the DS12885 datasheet, address latching via AS occurs regardless of CS state (*"Bus cycles that take place without asserting CS will latch addresses, but no access occurs"*). Since no data read or write can occur without CS asserted, spurious AS edges from non-RTC bus activity are harmless — they may re-latch the address, but never cause an unintended data access. Therefore no address-matching terms are needed in the RTC_AS equation.
 
 ### 5.4 Intel Mode Timing Summary
 
 For a **write to port 0x70** (set RTC register address):
 1. CPU puts 0x70 on address bus, AEN=0
 2. ATF22V10 asserts RTC_CS# low, BUF_EN# low
-3. AS = !A0 = 1 (A0=0 for port 0x70)
-4. CPU drives data (register address 0x00-0x7F) on D0-D7 → through 74245 → AD0-AD7
-5. IOW# goes low then high → DS12885 latches address from AD0-AD7 on IOW# rising edge
-6. AS returns low when bus cycle ends
+3. AS = !A0 = 1 (A0=0 for port 0x70) → the DS12885's internal address latch is **transparent** — AD0–AD7 flows through to the internal register address
+4. CPU drives data (register address 0x00-0x7F) on D0-D7 → through 74245 → AD0-AD7 → flows through the transparent latch as the register address
+5. IOW# (R/W) goes LOW then HIGH — but the DS12885 is still in the address phase (AS=1). The device does **not** perform a data write because the data-phase timing (tASED ≥ 40 ns after AS fall) has not been met. The R/W pulse is effectively ignored.
+6. Bus cycle ends → A0 changes → AS = !A0 **falls** → the address latch **freezes**, capturing the register address that was present on AD0–AD7 while AS was HIGH
 
 For a **read from port 0x71** (read RTC register data):
 1. CPU puts 0x71 on address bus, AEN=0
 2. ATF22V10 asserts RTC_CS# low, BUF_EN# low
-3. AS = !A0 = 0 (A0=1 for port 0x71) — no address latch, data phase
-4. IOR# goes low → DS12885 DS pin goes low → RTC drives data on AD0-AD7
+3. AS = !A0 = 0 (A0=1 for port 0x71) — address latch **stays frozen** with the previously set register address
+4. IOR# goes low → DS pin (= IOR# in Intel mode, acts as OE) goes low → DS12885 drives register data onto AD0-AD7
 5. 74245 direction = B→A (IOR# = 0 → DIR = 0) → data flows to ISA D0-D7
-6. CPU reads data
+6. CPU reads data; IOR# goes HIGH → DS12885 releases bus
 
 For a **write to port 0x71** (write RTC register data):
-1. Same as read but IOW# goes low instead
-2. DS12885 R/W pin (connected to IOW#) goes low then high → data latched on rising edge
+1. Same addressing as read — AS=0, address latch frozen, CS asserted
+2. CPU drives write data on D0-D7 → through 74245 → AD0-AD7
+3. IOW# (R/W) goes LOW then HIGH → DS12885 latches AD0-AD7 as write data on R/W rising edge
+
+### 5.5 Address Latch Integrity Between Bus Cycles
+
+Since `RTC_AS = !A0` toggles with every bus cycle (instruction fetches, memory reads, etc.), the DS12885's address latch opens and closes continuously between the OUT 70h and IN/OUT 71h instructions. This raises the question: does the latched register address get corrupted?
+
+**Why it works — bus capacitance retention:**
+
+1. During OUT 70h, the 74245 drives AD0-AD7 with the register address value. When the bus cycle ends, 74245 is disabled (BUF_EN# goes HIGH).
+2. The AD0-AD7 pins have ~7 pF parasitic capacitance (per DS12885 datasheet: CIO = 7 pF typical) and ≤ 1 µA leakage current. The 74245 B-side in high-Z adds similar characteristics.
+3. Between OUT 70h and IN/OUT 71h, the 8088 executes 0–2 instruction fetches (~840 ns at 4.77 MHz). Voltage droop on AD0-AD7 during this time: $\Delta V = I \cdot t / C = 1\,\mu A \times 840\,ns / 7\,pF \approx 120\,mV$ — negligible vs. logic thresholds (VIH min = 2.2 V, VIL max = 0.8 V).
+4. When AS toggles during instruction fetches, the latch opens (transparent) and closes (latches) with approximately the **same value** that was driven during OUT 70h, because bus capacitance preserves it.
+5. When the IN/OUT 71h cycle starts, AS = 0 (latch frozen). The latched address is the value retained by bus capacitance — which matches the register address written by OUT 70h.
+
+**Additional safety:** Even if the latched address were somehow corrupted, the only consequence would be reading/writing the wrong RTC register. No data access occurs during intervening bus cycles because CS is not asserted (RTC_CS# is HIGH when the address bus doesn't match 0x70-0x77).
 
 ## 6. 74245 Bus Buffer
 
@@ -425,7 +233,7 @@ For a **write to port 0x71** (write RTC register data):
 | 74245 Pin | Signal | Connection |
 |---|---|---|
 | A1-A8 (pins 2-9) | ISA D0-D7 | ISA bus data lines |
-| B1-B8 (pins 11-18) | Card D0-D7 | UART1, UART2, PRN data pins, DS12885 AD0-AD7 |
+| B1-B8 (pins 11-18) | Card D0-D7 | COM1, COM2, PRN data pins, DS12885 AD0-AD7 |
 | DIR (pin 1) | Direction | Connected to IOR# from ISA bus |
 | G# (pin 19) | Enable | BUF_EN# from ATF22V10 |
 
@@ -438,119 +246,7 @@ For a **write to port 0x71** (write RTC register data):
 
 G# (BUF_EN#) is active low. The 74245 is enabled only when a device on this card is being addressed, preventing bus conflicts with other ISA cards.
 
-## 7. Corrected Address Bit Analysis
-
-Let me present the final, verified address patterns:
-
-```
-Address  Hex    Binary (A9 A8 A7 A6 A5 A4 A3 A2 A1 A0)
-0x070    112    0  0  0  1  1  1  0  0  0  0    RTC addr register
-0x071    113    0  0  0  1  1  1  0  0  0  1    RTC data register
-0x278    632    1  0  0  1  1  1  1  0  0  0    LPT2 base
-0x2E8    744    1  0  1  1  1  0  1  0  0  0    COM4 base
-0x2F8    760    1  0  1  1  1  1  1  0  0  0    COM2 base
-0x378    888    1  1  0  1  1  1  1  0  0  0    LPT1 base
-0x3E8   1000    1  1  1  1  1  0  1  0  0  0    COM3 base
-0x3F8   1016    1  1  1  1  1  1  1  0  0  0    COM1 base
-```
-
-### Corrected Decode Patterns (A9..A3 only, A2-A0 decoded by devices)
-
-| Device | Port | A9 | A8 | A7 | A6 | A5 | A4 | A3 |
-|---|---|---|---|---|---|---|---|---|
-| UART1=0x3F8 | COM1 | 1 | 1 | 1 | 1 | 1 | 1 | 1 |
-| UART1=0x2F8 | COM2 | 1 | 0 | 1 | 1 | 1 | 1 | 1 |
-| UART2=0x3E8 | COM3 | 1 | 1 | 1 | 1 | 1 | 0 | 1 |
-| UART2=0x2E8 | COM4 | 1 | 0 | 1 | 1 | 1 | 0 | 1 |
-| PRN=0x378 | LPT1 | 1 | 1 | 0 | 1 | 1 | 1 | 1 |
-| PRN=0x278 | LPT2 | 1 | 0 | 0 | 1 | 1 | 1 | 1 |
-| RTC=0x070 | RTC | 0 | 0 | 0 | 1 | 1 | 1 | 0 |
-
-### Corrected Observations
-
-- **UART1**: 0x3F8 vs 0x2F8 differ in **A8** (not A9 as originally assumed!)
-- **UART2**: 0x3E8 vs 0x2E8 differ in **A8**
-- **PRN**: 0x378 vs 0x278 differ in **A8**
-- **All three** devices use A8 as the switching bit! A9=1 for all UART/PRN ports.
-
-### Corrected Jumper Scheme
-
-Since all three devices switch on A8, we can simplify:
-
-| Jumper | Controls | HIGH (shorted to VCC) | LOW (to GND) |
-|---|---|---|---|
-| J_UART1 | A8 match for UART1 | 0x3F8 (A8=1) | 0x2F8 (A8=0) |
-| J_UART2 | A8 match for UART2 | 0x3E8 (A8=1) | 0x2E8 (A8=0) |
-| J_PRN | A8 match for PRN | 0x378 (A8=1) | 0x278 (A8=0) |
-
-### Corrected CUPL Equations
-
-```cupl
-/* UART1: 0x3F8 (A9..A3 = 1111111) or 0x2F8 (A9..A3 = 1011111) */
-/* Differ in A8. Common: A9=1, A7=1, A6=1, A5=1, A4=1, A3=1 */
-UART1_CS = !AEN & EN_UART1
-         & A9 & (A8 $ !J_UART1) & A7 & A6 & A5 & A4 & A3;
-/* A8 $ !J_UART1 is XNOR(A8, J_UART1): true when A8 matches J_UART1 */
-/* In CUPL: XNOR is written as !(A8 $ J_UART1) or equivalently (A8 $ !J_UART1) */
-
-/* UART2: 0x3E8 (A9..A3 = 1111 0 1 1) or 0x2E8 (A9..A3 = 1011 0 1 1) */
-/* Differ in A8. Common: A9=1, A7=1, A6=1, A5=1, A4=0, A3=1 */
-UART2_CS = !AEN & EN_UART2
-         & A9 & (A8 $ !J_UART2) & A7 & A6 & A5 & !A4 & A3;
-
-/* PRN: 0x378 (A9..A3 = 1101111) or 0x278 (A9..A3 = 1001111) */
-/* Differ in A8. Common: A9=1, A7=0, A6=1, A5=1, A4=1, A3=1 */
-PRN_CS = !AEN & EN_PRN
-       & A9 & (A8 $ !J_PRN) & !A7 & A6 & A5 & A4 & A3;
-
-/* RTC: 0x70 = A9..A3 = 0001110 */
-RTC_CS = !AEN & !A9 & !A8 & !A7 & A6 & A5 & A4 & !A3;
-
-/* Buffer enable */
-BUF_EN = UART1_CS # UART2_CS # PRN_CS # RTC_CS;
-```
-
-## 8. Complete ATF22V10 Pin Assignment (Corrected)
-
-| ATF22V10 Pin | Direction | Signal | Purpose |
-|---|---|---|---|
-| 1 | Input | AEN | DMA cycle indicator |
-| 2 | Input | A0 | Address bit 0 (for RTC AS generation, directly active-low directly active low directly active low directly) |
-| 3 | Input | A3 | Address bit 3 |
-| 4 | Input | A4 | Address bit 4 |
-| 5 | Input | A5 | Address bit 5 |
-| 6 | Input | A6 | Address bit 6 |
-| 7 | Input | A7 | Address bit 7 |
-| 8 | Input | A8 | Address bit 8 (key switching bit) |
-| 9 | Input | A9 | Address bit 9 |
-| 10 | Input | J_UART1 | Jumper: UART1 address select |
-| 11 | Input | J_UART2 | Jumper: UART2 address select |
-| 12 | — | GND | Ground |
-| 13 | Input | J_PRN | Jumper: PRN address select |
-| 14 | Output | UART1_CS# | UART1 chip select (directly active low) |
-| 15 | Output | UART2_CS# | UART2 chip select (directly active low) |
-| 16 | Output | PRN_CS# | PRN chip select (directly active low) |
-| 17 | Output | RTC_CS# | RTC chip select (directly active low) |
-| 18 | Output | BUF_EN# | 74245 output enable (directly active low) |
-| 19 | Output | RTC_AS | DS12885 Address Strobe (active high = !A0, directly active high when A0=0) |
-| 20 | Input | EN_PRN# | PRN enable jumper (pulled up, short to GND to enable) |
-| 21 | Input | EN_UART2# | UART2 enable jumper |
-| 22 | Input | EN_UART1# | UART1 enable jumper |
-| 23 | Output | (spare) | Reserved for future use |
-| 24 | — | VCC | +5V |
-
-### RTC_AS Equation (added to PLD)
-
-```cupl
-/* RTC Address Strobe: active high when A0=0 during RTC access */
-/* In IBM AT compatible design, AS simply inverts A0 */
-/* CS ensures the DS12885 ignores AS when not selected */
-RTC_AS = !A0;
-```
-
-Note: RTC_AS could also be generated with a simple inverter outside the PLD, but using a PLD output saves a chip.
-
-## 9. Bill of Materials (Logic Section)
+## 7. Bill of Materials (Logic Section)
 
 | Ref | Component | Package | Qty | Purpose |
 |---|---|---|---|---|
@@ -568,7 +264,7 @@ Note: RTC_AS could also be generated with a simple inverter outside the PLD, but
 | R5-R7 | 10k resistor | Axial | 3 | Pull-down for J_xxx addr jumpers |
 | JP1-JP10 | Pin headers | 2.54mm | Various | Jumper configuration headers |
 
-## 10. Schematic Block Diagram
+## 8. Schematic Block Diagram
 
 ```
                     ISA 8-bit Bus
@@ -592,12 +288,12 @@ Note: RTC_AS could also be generated with a simple inverter outside the PLD, but
     │ ATF22V10     │  │ │     │            │    │      │       │  │
     │              │  │ │     │            │    │      │       │  │
     │ A0-A9,AEN ◄──┼──┼─┼─────┘            │    │      │       │  │
-    │ J_UART1/2 ◄──┼──┼─┼── Jumpers        │    │      │       │  │
+    │ J_COM1/2 ◄──┼──┼─┼── Jumpers        │    │      │       │  │
     │ J_PRN     ◄──┼──┼─┼── Jumpers        │    │      │       │  │
     │ EN_*#     ◄──┼──┼─┼── Jumpers        │    │      │       │  │
     │              │  │ │                   │    │      │       │  │
-    │ UART1_CS# ───┼──┼─┼──► UART1 CS2     │    │      │       │  │
-    │ UART2_CS# ───┼──┼─┼──► UART2 CS2     │    │      │       │  │
+    │ COM1_CS# ───┼──┼─┼──► COM1 CS2     │    │      │       │  │
+    │ COM2_CS# ───┼──┼─┼──► COM2 CS2     │    │      │       │  │
     │ PRN_CS#   ───┼──┼─┼──► PRN CS        │    │      │       │  │
     │ RTC_CS#   ───┼──┼─┼──► DS12885 CS    │    │      │       │  │
     │ BUF_EN#   ───┼──┘ │                  │    │      │       │  │
@@ -608,7 +304,7 @@ Note: RTC_AS could also be generated with a simple inverter outside the PLD, but
                    ══════╪══════════════════╪════╪══════╪═══════╪══╪
                          │                  │    │      │       │  │
               ┌──────┐ ┌─┴────┐ ┌──────┐ ┌─┴────┴──┐   │       │  │
-              │UART1 │ │UART2 │ │ PRN  │ │ DS12885 │   │       │  │
+              │COM1  │ │COM2  │ │ PRN  │ │ DS12885 │   │       │  │
               │16450 │ │16450 │ │82C11 │ │  RTC    │   │       │  │
               │      │ │      │ │      │ │DS=IOR#  │   │       │  │
               │      │ │      │ │      │ │R/W=IOW# │   │       │  │
@@ -620,7 +316,7 @@ Note: RTC_AS could also be generated with a simple inverter outside the PLD, but
                                                     To ISA IRQ lines
 ```
 
-## 11. Implementation Steps
+## 9. Implementation Steps
 
 1. **Create KiCad schematic** with all components
 2. **Program ATF22V10** with CUPL equations using a programmer (e.g., TL866II+)
@@ -628,7 +324,7 @@ Note: RTC_AS could also be generated with a simple inverter outside the PLD, but
 4. **PCB layout** following standard ISA card dimensions (XT 8-bit: 4.8" x 3.7" approx)
 5. **Test each subsystem** independently (RTC first, then UARTs, then PRN)
 
-## 12. Design Notes and Caveats
+## 10. Design Notes and Caveats
 
 - The ATF22V10C-15PU (15ns) is fast enough for ISA bus timing (ISA bus cycle ~500ns minimum).
 - All address jumper pull-down resistors (10k) ensure a defined state when no jumper cap is installed (defaults to Option B / lower address).
@@ -637,3 +333,142 @@ Note: RTC_AS could also be generated with a simple inverter outside the PLD, but
 - UART IRQ outputs may need to be open-collector/drain if sharing IRQ lines. Check the specific UART chip datasheet.
 - The 74HCT245 variant (not 74HC245) is recommended for proper TTL-level compatibility with the ISA bus.
 - CR2032 battery: connect positive terminal to DS12885 VBAT, negative to GND. Add a series diode (1N4148) or Schottky diode to prevent reverse charging (optional, DS12885 is UL recognized for this).
+
+## 11. ATF22V10 Chip Logic — Detailed Analysis
+
+### 11.1 XNOR Address Matching
+
+For each configurable device (COM1, COM2, PRN), the two alternative base addresses differ only in A8. The PLD uses XNOR(A8, J_xxx) to check whether the bus address matches the jumper setting:
+
+$$\text{A8\_MATCH} = \text{A8} \odot \text{J\_xxx} = (\text{A8} \cdot \text{J\_xxx}) + (\overline{\text{A8}} \cdot \overline{\text{J\_xxx}})$$
+
+Since the ATF22V10 cannot express XNOR as a single gate, each chip-select equation expands into two product terms (one for A8=1∧J=1, one for A8=0∧J=0). The remaining address bits (A9, A7–A3) are checked against fixed expected values. Every equation also requires AEN=0 (not a DMA cycle) and the device's enable jumper to be active.
+
+### 11.2 PLD Equations
+
+**COM1** (0x3F8 or 0x2F8 — fixed bits: A9=1, A7–A3=11111):
+
+```
+/COM1 = /AEN * /ECOM1 * A9 *  A8 *  JCOM1 * A7 * A6 * A5 * A4 * A3
+       + /AEN * /ECOM1 * A9 * /A8 * /JCOM1 * A7 * A6 * A5 * A4 * A3
+```
+
+**COM2** (0x3E8 or 0x2E8 — same as COM1 but A4=0):
+
+```
+/COM2 = /AEN * /ECOM2 * A9 *  A8 *  JCOM2 * A7 * A6 * A5 * /A4 * A3
+       + /AEN * /ECOM2 * A9 * /A8 * /JCOM2 * A7 * A6 * A5 * /A4 * A3
+```
+
+**PRN** (0x378 or 0x278 — same structure but A7=0):
+
+```
+/PRN = /AEN * /ENPRN * A9 *  A8 *  JPRN * /A7 * A6 * A5 * A4 * A3
+     + /AEN * /ENPRN * A9 * /A8 * /JPRN * /A7 * A6 * A5 * A4 * A3
+```
+
+**RTC** (0x70–0x71 fixed, no jumper/enable — 1 product term):
+
+```
+/RTC = /AEN * /A9 * /A8 * /A7 * A6 * A5 * A4 * /A3
+```
+
+> **Note:** A1 and A2 are not decoded, so RTC_CS# responds to the full 8-byte range 0x70–0x77. Unlike the UARTs and PRN (which internally decode A0–A2 into 8 separate registers), the DS12885 has no address pins — it uses the multiplexed AD0–AD7 bus. Ports 0x72–0x77 act as functional aliases of 0x70/0x71 (even addresses → address phase, odd addresses → data phase). This matches the original IBM AT behavior, where the chipset also does not fully decode A1–A2 for the RTC.
+
+**BUFEN** — logical OR of all chip-select conditions. The CUPL source references the output signal names (`COM1_CS # COM2_CS # ...`), and the compiler expands them inline into the full product-term equations (7 terms total ≤ 16 available). This avoids pin-feedback delay and ensures BUF_EN# asserts simultaneously with the chip-select outputs, both with a single PLD propagation delay from input change:
+
+```
+/BUFEN = /AEN * /ECOM1 * A9 *  A8 *  JCOM1 * A7 * A6 * A5 * A4 * A3
+       + /AEN * /ECOM1 * A9 * /A8 * /JCOM1 * A7 * A6 * A5 * A4 * A3
+       + /AEN * /ECOM2 * A9 *  A8 *  JCOM2 * A7 * A6 * A5 * /A4 * A3
+       + /AEN * /ECOM2 * A9 * /A8 * /JCOM2 * A7 * A6 * A5 * /A4 * A3
+       + /AEN * /ENPRN  * A9 *  A8 *  JPRN   * /A7 * A6 * A5 * A4 * A3
+       + /AEN * /ENPRN  * A9 * /A8 * /JPRN   * /A7 * A6 * A5 * A4 * A3
+       + /AEN * /A9 * /A8 * /A7 * A6 * A5 * A4 * /A3
+```
+
+**RTCAS** — simple inverter; DS12885 CS gates whether AS is acted upon:
+
+```
+RTCAS = /A0
+```
+
+### 11.3 Product Term Budget
+
+| Output Pin | Signal | Available PTs | Used PTs | Utilization |
+|------------|--------|---------------|----------|-------------|
+| 14 | /COM1 | 8 | 2 | 25% |
+| 15 | /COM2 | 10 | 2 | 20% |
+| 16 | /PRN | 12 | 2 | 17% |
+| 17 | /RTC | 14 | 1 | 7% |
+| 18 | /BUFEN | 16 | 7 | 44% |
+| 19 | RTCAS | 16 | 1 | 6% |
+| 20–22 | inputs | — | 0 | — |
+| 23 | NC | 8 | 0 | spare |
+
+Total: **15 product terms** used, substantial headroom for future additions.
+
+### 11.4 CUPL Source
+
+```cupl
+Name     ISA8_DECODE;
+PartNo   01;
+Date     2026-02-14;
+Designer VK;
+Company  ;
+Assembly ;
+Location ;
+Device   g22v10;
+
+/* Inputs */
+Pin 1  = AEN;
+Pin 2  = A0;
+Pin 3  = A3;
+Pin 4  = A4;
+Pin 5  = A5;
+Pin 6  = A6;
+Pin 7  = A7;
+Pin 8  = A8;
+Pin 9  = A9;
+Pin 10 = J_COM1;
+Pin 11 = J_COM2;
+Pin 13 = J_PRN;
+
+/* Active-low enable jumpers (active when LOW = shorted to GND) */
+Pin 22 = !EN_COM1;  /* active low input */
+Pin 21 = !EN_COM2;
+Pin 20 = !EN_PRN;
+
+/* Outputs (active-low) */
+Pin 14 = !COM1_CS;
+Pin 15 = !COM2_CS;
+Pin 16 = !PRN_CS;
+Pin 17 = !RTC_CS;
+Pin 18 = !BUF_EN;
+Pin 19 = RTCAS;
+
+/* COM1: 0x3F8 or 0x2F8 — differ in A8 */
+/* Common: A9=1, A7=1, A6=1, A5=1, A4=1, A3=1 */
+COM1_CS = !AEN & EN_COM1
+         & A9 & (A8 $ !J_COM1) & A7 & A6 & A5 & A4 & A3;
+
+/* COM2: 0x3E8 or 0x2E8 — differ in A8 */
+/* Common: A9=1, A7=1, A6=1, A5=1, A4=0, A3=1 */
+COM2_CS = !AEN & EN_COM2
+         & A9 & (A8 $ !J_COM2) & A7 & A6 & A5 & !A4 & A3;
+
+/* PRN: 0x378 or 0x278 — differ in A8 */
+/* Common: A9=1, A7=0, A6=1, A5=1, A4=1, A3=1 */
+PRN_CS = !AEN & EN_PRN
+       & A9 & (A8 $ !J_PRN) & !A7 & A6 & A5 & A4 & A3;
+
+/* RTC: 0x70-0x71 (fixed) */
+/* A9=0, A8=0, A7=0, A6=1, A5=1, A4=1, A3=0 */
+RTC_CS = !AEN & !A9 & !A8 & !A7 & A6 & A5 & A4 & !A3;
+
+/* Buffer enable: active when any CS is active */
+BUF_EN = COM1_CS # COM2_CS # PRN_CS # RTC_CS;
+
+/* RTC Address Strobe: AS = !A0 (inverted A0) */
+RTCAS = !A0;
+```

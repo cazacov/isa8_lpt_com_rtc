@@ -7,9 +7,9 @@
                           |                 |
                        A0 |  2           23 | NC
                           |                 |
-                       A3 |  3           22 | EUART1
+                       A3 |  3           22 | ECOM1
                           |                 |
-                       A4 |  4           21 | EUART2
+                       A4 |  4           21 | ECOM2
                           |                 |
                        A5 |  5           20 | ENPRN
                           |                 |
@@ -21,9 +21,9 @@
                           |                 |
                        A9 |  9           16 | PRN
                           |                 |
-                   JUART1 | 10           15 | UART2
+                    JCOM1 | 10           15 | COM2
                           |                 |
-                   JUART2 | 11           14 | UART1
+                    JCOM2 | 11           14 | COM1
                           |                 |
                       GND | 12           13 | JPRN
                           -------------------
