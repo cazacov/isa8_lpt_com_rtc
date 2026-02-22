@@ -45,9 +45,9 @@ Only the subset of ISA bus signals needed for RTC operation:
 | A4 | D5 | Bidir | 74HCT245 pin 7 (A6) |
 | A3 | D6 | Bidir | 74HCT245 pin 8 (A7) |
 | A2 | D7 | Bidir | 74HCT245 pin 9 (A8) |
-| A31 | A0 | In | ATF22V10 pin 2 |
+| A31 | A0 | In | ATF22V10 pin 1 |
 | A30 | A1 | In | (not used — no connection) |
-| A29 | A2 | In | (not used — no connection) |
+| A29 | A2 | In | ATF22V10 pin 2 |
 | A28 | A3 | In | ATF22V10 pin 3 |
 | A27 | A4 | In | ATF22V10 pin 4 |
 | A26 | A5 | In | ATF22V10 pin 5 |
@@ -55,10 +55,9 @@ Only the subset of ISA bus signals needed for RTC operation:
 | A24 | A7 | In | ATF22V10 pin 7 |
 | A23 | A8 | In | ATF22V10 pin 8 |
 | A22 | A9 | In | ATF22V10 pin 9 |
-| B13 | IOW# | In | DS12885 pin 15 (R/W) |
-| B14 | IOR# | In | DS12885 pin 17 (DS), 74HCT245 pin 1 (DIR) |
-| A11 | AEN | In | ATF22V10 pin 1 |
-| B2 | RESET DRV | In | DS12885 pin 18 (RESET) |
+| B13 | IOW# | In | ATF22V10 pin 11 |
+| B14 | IOR# | In | ATF22V10 pin 10, 74HCT245 pin 1 (DIR) |
+| A11 | AEN | In | ATF22V10 pin 13 |
 | B21 | IRQ7 | Out | JP1 option |
 | B22 | IRQ6 | Out | JP1 option |
 | B23 | IRQ5 | Out | JP1 option |
@@ -75,8 +74,8 @@ Same firmware as plan.md. All pins are wired — some go to real signals, others
 
 | ATF22V10 Pin | Signal | Prototype Connection |
 |---|---|---|
-| 1 | AEN | ISA bus AEN |
-| 2 | A0 | ISA bus A0 |
+| 1 | A0 | ISA bus A0 |
+| 2 | A2 | ISA bus A2 |
 | 3 | A3 | ISA bus A3 |
 | 4 | A4 | ISA bus A4 |
 | 5 | A5 | ISA bus A5 |
@@ -84,25 +83,29 @@ Same firmware as plan.md. All pins are wired — some go to real signals, others
 | 7 | A7 | ISA bus A7 |
 | 8 | A8 | ISA bus A8 |
 | 9 | A9 | ISA bus A9 |
-| 10 | J_COM1 | Wire directly to GND (no COM1) |
-| 11 | J_COM2 | Wire directly to GND (no COM2) |
+| 10 | IOR# | ISA bus IOR# (input to PLD) |
+| 11 | IOW# | ISA bus IOW# (input to PLD) |
 | 12 | GND | Ground |
-| 13 | J_PRN | Wire directly to GND (no PRN) |
+| 13 | AEN | ISA bus AEN (DMA indicator) |
 | **14** | **COM1_CS#** | **No connection** (output floats, no COM1 chip) |
 | **15** | **COM2_CS#** | **No connection** (output floats, no COM2 chip) |
 | **16** | **PRN_CS#** | **No connection** (output floats, no PRN chip) |
-| **17** | **RTC_CS#** | **DS12885 pin 13 (CS)** |
+| **17** | **RTC_WR#** | **DS12885 pin 15 (WR# in Intel mode)** |
 | **18** | **BUF_EN#** | **74HCT245 pin 19 (G#)** |
 | **19** | **RTC_AS** | **DS12885 pin 14 (AS)** |
-| 20 | EN_PRN# | Wire directly to VCC (PRN disabled) |
-| 21 | EN_COM2# | Wire directly to VCC (COM2 disabled) |
-| 22 | EN_COM1# | Wire directly to VCC (COM1 disabled) |
-| **23** | **(spare)** | **No connection** |
+| **20** | **RTC_DS#** | **DS12885 pin 17 (DS# in Intel mode)** |
+| 21 | J_COM1 | Wire directly to GND (no COM1) |
+| 22 | J_COM2 | Wire directly to GND (no COM2) |
+| 23 | J_PRN | Wire directly to GND (no PRN) |
 | 24 | VCC | +5V |
 
-Because EN_COM1#, EN_COM2#, and EN_PRN# are pulled HIGH (disabled), the PLD
-will never assert COM1_CS#, COM2_CS#, or PRN_CS#. BUF_EN# activates only when
-RTC_CS# fires.
+IOR# and IOW# are on dedicated input pins 10–11. All three address jumpers
+(J_COM1, J_COM2, J_PRN) are grouped on adjacent I/O pins 21–23, wired to GND
+on this prototype board. A0 and A2 are on dedicated input pins 1–2 for compact
+address bus routing; AEN is on I/O pin 13 (configured as input). The PLD
+generates qualified RTC_WR#
+and RTC_DS# strobes — DS12885 CS# is tied to GND (always selected). BUF_EN#
+activates whenever any device address range is on the bus.
 
 ---
 
@@ -122,12 +125,12 @@ RTC_CS# fires.
 | 10 | AD6 | 74HCT245 pin 12 (B7) |
 | 11 | AD7 | 74HCT245 pin 11 (B8) |
 | 12 | GND | Ground |
-| 13 | CS | ATF22V10 pin 17 (RTC_CS#) |
-| 14 | AS | ATF22V10 pin 19 (RTC_AS = !A0) |
-| 15 | R/W | ISA bus IOW# (write-enable, data latched on rising edge) |
+| 13 | CS | GND (always selected — strobes are PLD-qualified) |
+| 14 | AS | ATF22V10 pin 19 (RTC_AS) |
+| 15 | WR# | ATF22V10 pin 17 (RTC_WR# — qualified write strobe for 0x71) |
 | 16 | GND | Ground (second GND pad) |
-| 17 | DS | ISA bus IOR# (output-enable for reads) |
-| 18 | RESET | ISA bus RESET DRV |
+| 17 | DS# | ATF22V10 pin 20 (RTC_DS# — qualified data strobe for 0x71) |
+| 18 | RESET | VCC (per datasheet: allows power-fail transitions without clearing control registers) |
 | 19 | IRQ | R1 (4.7k pull-up to VCC), then to JP1 pin 1 |
 | 20 | VBAT | BT1 positive (+3V CR2032) |
 | 21 | RCLR | 10k pull-up to VCC (or push-button to GND for manual RAM clear) |
@@ -191,19 +194,19 @@ JP1:  1x4 pin header
 
 ```
 ═══════════════════════════ ISA 8-bit Bus Edge Connector (J1) ══════════════════
-  D0─D7          A0  A3─A9      IOR#   IOW#   AEN   RESET   IRQ5  IRQ6  IRQ7
-   │              │   │           │      │      │      │       │     │     │
-   │   ┌──────────┤   │           │      │      │      │       │     │     │
-   │   │          │   │           │      │      │      │       │     │     │
-   │   │          │   │           │      │      │      │       │     │     │
-═══╪═══╪══════════╪═══╪═══════════╪══════╪══════╪══════╪═══════╪═════╪═════╪════
-   │   │          │   │           │      │      │      │       │     │     │
-   │   │          │   │           │      │      │      │     ┌─┴──┬──┴──┬──┘
-   │   │          │   │           │      │      │      │     │ JP1│     │
-   │   │          │   │           │      │      │      │     │2  3│  4  │
-   │   │          │   │           │      │      │      │     └─┬──┴──┬──┘
-   │   │          │   │           │      │      │      │       └──┬──┘
-   │   │          │   │           │      │      │      │          │1
+  D0─D7          A0  A3─A9      IOR#   IOW#   AEN             IRQ5  IRQ6  IRQ7
+   │              │   │           │      │      │               │     │     │
+   │   ┌──────────┤   │           │      │      │               │     │     │
+   │   │          │   │           │      │      │               │     │     │
+   │   │          │   │           │      │      │               │     │     │
+═══╪═══╪══════════╪═══╪═══════════╪══════╪══════╪═══════════════╪═════╪═════╪════
+   │   │          │   │           │      │      │               │     │     │
+   │   │          │   │           │      │      │             ┌─┴──┬──┴──┬──┘
+   │   │          │   │           │      │      │             │ JP1│     │
+   │   │          │   │           │      │      │             │2  3│  4  │
+   │   │          │   │           │      │      │             └─┬──┴──┬──┘
+   │   │          │   │           │      │      │               └──┬──┘
+   │   │          │   │           │      │      │                 │1
    │   │          │   │           │      │      │      │          │
    │   │          │   │           │      │      │      │      R1 4.7k
    │   │          │   │           │      │      │      │          │
@@ -234,25 +237,25 @@ JP1:  1x4 pin header
 │  │ pin 8  A7 ── D6    │   │ pin 7  A7  ── A7    │   │ pin 5  AD1 ─┼─┼──pin 17 B2
 │  │ pin 9  A8 ── D7    │   │ pin 8  A8  ── A8    │   │ pin 6  AD2 ─┼─┼──pin 16 B3
 │  │                    │   │ pin 9  A9  ── A9    │   │ pin 7  AD3 ─┼─┼──pin 15 B4
-│  │ Card Side:         │   │ pin 10 J1  ─┤10k├─GND  │ pin 8  AD4 ─┼─┼──pin 14 B5
-│  │ pin 18 B1 ── AD0   │   │ pin 11 J2  ─┤10k├─GND  │ pin 9  AD5 ─┼─┼──pin 13 B6
-│  │ pin 17 B2 ── AD1   │   │ pin 13 JP  ─┤10k├─GND  │ pin 10 AD6 ─┼─┼──pin 12 B7
+│  │ Card Side:         │   │ pin 10 IOR ── IOR#    │ pin 8  AD4 ─┼─┼──pin 14 B5
+│  │ pin 18 B1 ── AD0   │   │ pin 11 IOW ── IOW#    │ pin 9  AD5 ─┼─┼──pin 13 B6
+│  │ pin 17 B2 ── AD1   │   │ pin 13 NC             │   │ pin 10 AD6 ─┼─┼──pin 12 B7
 │  │ pin 16 B3 ── AD2   │   │                      │   │ pin 11 AD7 ─┼─┼──pin 11 B8
-│  │ pin 15 B4 ── AD3   │   │ pin 22 EU1 ─┤10k├─VCC  │              │ │  │
-│  │ pin 14 B5 ── AD4   │   │ pin 21 EU2 ─┤10k├─VCC  │ pin 12 GND──┼─┼──GND
-│  │ pin 13 B6 ── AD5   │   │ pin 20 EP  ─┤10k├─VCC  │ pin 13 CS ──┼─┼──────────┐
-│  │ pin 12 B7 ── AD6   │   │                      │   │ pin 14 AS ──┼─┼────────┐ │
-│  │ pin 11 B8 ── AD7   │   │ Outputs:             │   │ pin 15 R/W──┼─┼─ IOW#  │ │
-│  │                    │   │ pin 14 COM1_CS#  NC │   │ pin 16 GND──┼─┼──GND   │ │
-│  │ pin 1  DIR ── IOR# │   │ pin 15 COM2_CS#  NC │   │ pin 17 DS ──┼─┼─ IOR#  │ │
-│  │ pin 19 G#  ────────┼───┤ pin 16 PRN_CS#    NC │   │ pin 18 RST──┼─┼─RESET  │ │
-│  │ pin 10 GND ── GND  │   │ pin 17 RTC_CS# ─────┼───┤►pin 13 CS   │ │        │ │
-│  │ pin 20 VCC ── VCC  │   │ pin 18 BUF_EN# ─────┼───┤►pin 19 G#   │ │        │ │
-│  │                    │   │ pin 19 RTC_AS  ──────┼───┤►pin 14 AS   │ │        │ │
-│  └────────────────────┘   │ pin 23 (spare)    NC │   │ pin 19 IRQ──┼─┼─ JP1   │ │
-│                           │                      │   │ pin 20 VBAT─┼─┼─ BT1+  │ │
-│                           │ pin 12 GND ── GND    │   │ pin 21 RCLR─┤10k├─VCC  │ │
-│                           │ pin 24 VCC ── VCC    │   │ pin 22 N.C. │ │        │ │
+│  │ pin 15 B4 ── AD3   │   │ pin 23 JP  ─┤10k├─GND  │   │              │ │  │
+│  │ pin 14 B5 ── AD4   │   │ pin 22 J2  ─┤10k├─GND  │ pin 12 GND──┼─┼──GND
+│  │ pin 13 B6 ── AD5   │   │ pin 21 J1  ─┤10k├─GND  │ pin 13 CS ──┼─┼──GND
+│  │ pin 12 B7 ── AD6   │   │ pin 20 RTC_DS#────────┼───┤►pin 17 DS#   │ │
+│  │ pin 11 B8 ── AD7   │   │ Outputs:             │   │ pin 14 AS   │ │        │
+│  │                    │   │ pin 14 COM1_CS#  NC │   │ pin 15 WR#  │ │        │
+│  │ pin 1  DIR ── IOR# │   │ pin 15 COM2_CS#  NC │   │ pin 16 GND──┼─┼──GND   │
+│  │ pin 19 G#  ────────┼───┤ pin 16 PRN_CS#    NC │   │ pin 17 DS#   │ │        │
+│  │ pin 10 GND ── GND  │   │ pin 17 RTC_WR# ──────┼───┤►pin 15 WR#  │ │        │
+│  │ pin 20 VCC ── VCC  │   │ pin 18 BUF_EN# ─────┼───┤►pin 19 G#   │ │        │
+│  │                    │   │ pin 19 RTC_AS  ──────┼───┤►pin 14 AS   │ │        │
+│  └────────────────────┘   │ pin 20 RTC_DS#  ─────┼───┤►pin 17 DS#   │ │        │
+│                           │                      │   │ pin 18 RST──┼─┼─VCC    │
+│                           │ pin 12 GND ── GND    │   │ pin 19 IRQ──┼─┼─ JP1   │
+│                           │ pin 24 VCC ── VCC    │   │ pin 20 VBAT─┼─┼─ BT1+  │
 │                           │                      │   │ pin 23 SQW  NC│        │ │
 │                           └──────────────────────┘   │ pin 24 VCC──┼─┼──VCC   │ │
 │                                                      │             │ │        │ │
@@ -289,7 +292,8 @@ CARD_D4         U2 pin 14 (B5)          U3 pin 8 (AD4)
 CARD_D5         U2 pin 13 (B6)          U3 pin 9 (AD5)
 CARD_D6         U2 pin 12 (B7)          U3 pin 10 (AD6)
 CARD_D7         U2 pin 11 (B8)          U3 pin 11 (AD7)
-ISA_A0          ISA A0 (A31)            U1 pin 2
+ISA_A0          ISA A0 (A31)            U1 pin 1
+ISA_A2          ISA A2 (A29)            U1 pin 2
 ISA_A3          ISA A3 (A28)            U1 pin 3
 ISA_A4          ISA A4 (A27)            U1 pin 4
 ISA_A5          ISA A5 (A26)            U1 pin 5
@@ -297,13 +301,15 @@ ISA_A6          ISA A6 (A25)            U1 pin 6
 ISA_A7          ISA A7 (A24)            U1 pin 7
 ISA_A8          ISA A8 (A23)            U1 pin 8
 ISA_A9          ISA A9 (A22)            U1 pin 9
-ISA_AEN         ISA AEN (A11)           U1 pin 1
-ISA_IOR#        ISA IOR# (B14)          U2 pin 1 (DIR), U3 pin 17 (DS)
-ISA_IOW#        ISA IOW# (B13)          U3 pin 15 (R/W)
-ISA_RESET       ISA RESET DRV (B2)      U3 pin 18 (RESET)
-RTC_CS#         U1 pin 17               U3 pin 13 (CS)
+ISA_AEN         ISA AEN (A11)           U1 pin 13
+ISA_IOR#        ISA IOR# (B14)          U2 pin 1 (DIR), U1 pin 10 (IOR)
+ISA_IOW#        ISA IOW# (B13)          U1 pin 11 (IOW)
+RTC_RESET       VCC                     U3 pin 18 (RESET)
+RTC_WR#         U1 pin 17               U3 pin 15 (WR#)
 BUF_EN#         U1 pin 18               U2 pin 19 (G#)
 RTC_AS          U1 pin 19               U3 pin 14 (AS)
+RTC_DS#         U1 pin 20               U3 pin 17 (DS#)
+RTC_CS#         GND                     U3 pin 13 (CS)
 RTC_IRQ         U3 pin 19               R1 (4.7k to VCC), JP1 pin 1
 VCC             ISA +5V                 U1-24, U2-20, U3-24, R pull-ups, C bypass
 GND             ISA GND                 U1-12, U2-10, U3-12, U3-16, R pull-downs, C bypass
@@ -319,34 +325,37 @@ VBAT            BT1 (+)                 U3 pin 20
 ```
 Step  ISA Bus                 ATF22V10           74HCT245         DS12885
 ────  ────────────────────    ─────────────────  ────────────────  ──────────────
-  1   CPU drives A0=0,        AEN=0              (waiting)         (waiting)
-      A3-A9 = 0001110
+  1   CPU drives A0=0,        AEN=0              (waiting)         CS=GND (always
+      A3-A9 = 0001110                                              selected)
       AEN=0
 
-  2   PLD decodes             RTC_CS# → LOW      G# goes LOW      CS asserted
-      port 0x70               BUF_EN# → LOW      (buffer on)
-                              RTC_AS → HIGH
-                              (because !A0=1)
+  2   PLD decodes             BUF_EN# → LOW      G# goes LOW      WR# HIGH (idle)
+      port 0x70               RTC_AS still LOW   (buffer on)      DS# HIGH (idle)
+                              RTC_WR# HIGH
+                              RTC_DS# HIGH
+                              (IOW#/IOR# not
+                               yet active)
 
-  3   CPU drives data         (stable)           DIR=1 (IOR#=1)   AS=HIGH, sees
-      on D0-D7                                   A→B: ISA→card    address on AD0-7
+  3   CPU drives data         (stable)           DIR=1 (IOR#=1)   AS still LOW
+      on D0-D7                                   A→B: ISA→card    data on AD0-7
 
-  4   IOW# goes LOW           (stable)           (stable)          R/W goes LOW
-                                                                   (ignored: AS=1
-                                                                    still in addr
-                                                                    phase, tASED
-                                                                    not met)
+  4   IOW# goes LOW           RTC_AS → HIGH      (stable)          AS goes HIGH
+                              (addr match +                        → latch opens
+                               A0=0 + IOW#)                       (transparent)
+                              RTC_WR# stays HIGH                   WR# stays HIGH
+                              (A0=0, no data                      (no data write)
+                               write)
 
-  5   IOW# returns HIGH       (stable)           (stable)          R/W rising edge
-                                                                   — no data write
-                                                                   (AS still HIGH)
-
-  6   Bus cycle ends           CS#→HIGH           G#→HIGH          CS deasserted
-                               RTC_AS→LOW                          AS falls →
-                               (A0 changes)                        address latch
+  5   IOW# returns HIGH       RTC_AS → LOW       (stable)          AS falls →
+                                                                   address latch
                                                                    FREEZES,
                                                                    capturing
-                                                                   reg addr
+                                                                   reg addr.
+
+  6   Bus cycle ends           BUF_EN#→HIGH      G#→HIGH          Latch frozen,
+      Between cycles,          RTC_AS stays LOW                    address safe.
+      RTC_AS stays LOW —       (addr mismatch)                     WR#/DS# idle.
+      no corruption possible
 ```
 
 ### Test 2: Read RTC Data Register (IN AL, 71h)
@@ -354,25 +363,53 @@ Step  ISA Bus                 ATF22V10           74HCT245         DS12885
 ```
 Step  ISA Bus                 ATF22V10           74HCT245         DS12885
 ────  ────────────────────    ─────────────────  ────────────────  ──────────────
-  1   CPU drives A0=1,        AEN=0              (waiting)         (waiting)
-      A3-A9 = 0001110
+  1   CPU drives A0=1,        AEN=0              (waiting)         CS=GND (always
+      A3-A9 = 0001110                                              selected)
       AEN=0
 
-  2   PLD decodes             RTC_CS# → LOW      G# goes LOW      CS asserted
-      port 0x71               BUF_EN# → LOW      (buffer on)
-                              RTC_AS → LOW
-                              (because !A0=0)
+  2   PLD decodes             BUF_EN# → LOW      G# goes LOW      WR# HIGH (idle)
+      port 0x71               RTC_AS stays LOW   (buffer on)      DS# HIGH (idle)
+                              (A0=1)
 
-  3   IOR# goes LOW           (stable)           DIR=0 (IOR#=0)   DS goes LOW
-                                                 B→A: card→ISA    RTC drives data
-                                                                   onto AD0-7
+  3   IOR# goes LOW           RTC_DS# → LOW       DIR=0 (IOR#=0)   DS# goes LOW
+                              (addr match +      B→A: card→ISA    → RTC drives
+                               A0=1 + IOR#)                        data onto
+                                                                   AD0-AD7
 
   4   Data flows:             (stable)           AD0-7 → D0-7     (driving bus)
       DS12885 → 74245 B→A → ISA D0-D7
       CPU reads D0-D7
 
-  5   IOR# returns HIGH       (stable)           DIR=1, G#→HIGH   DS goes HIGH
-      Bus cycle ends           CS#→HIGH                            bus released
+  5   IOR# returns HIGH       RTC_DS# → HIGH      DIR=1, G#→HIGH   DS# goes HIGH
+      Bus cycle ends           BUF_EN#→HIGH                        bus released
+```
+
+### Test 3: Write RTC Data Register (OUT 71h, value)
+
+```
+Step  ISA Bus                 ATF22V10           74HCT245         DS12885
+────  ────────────────────    ─────────────────  ────────────────  ──────────────
+  1   CPU drives A0=1,        AEN=0              (waiting)         CS=GND
+      A3-A9 = 0001110
+      AEN=0
+
+  2   PLD decodes             BUF_EN# → LOW      G# goes LOW      WR# HIGH
+      port 0x71               RTC_AS stays LOW   (buffer on)      DS# HIGH
+                              (A0=1)
+
+  3   CPU drives write data   (stable)           DIR=1 (IOR#=1)   (waiting)
+      on D0-D7                                   A→B: ISA→card
+
+  4   IOW# goes LOW           RTC_WR# → LOW       (stable)          WR# goes LOW
+                              (addr match +                        (write mode)
+                               A0=1 + IOW#)
+
+  5   IOW# returns HIGH       RTC_WR# → HIGH      (stable)          WR# rising edge
+                                                                   → DS12885
+                                                                   latches data
+                                                                   from AD0-AD7
+
+  6   Bus cycle ends           BUF_EN#→HIGH      G#→HIGH          Write complete
 ```
 
 ---
@@ -411,12 +448,13 @@ I 71
 - [ ] Power: verify +5V on U1-24, U2-20, U3-24 and GND continuity
 - [ ] No bus contention: with card inserted but before testing, check no data bus
       pins are being driven (74245 G# should be HIGH when no I/O cycle)
-- [ ] PLD decode: use logic analyzer on RTC_CS# (U1-17) — should pulse LOW only
-      during port 0x70 or 0x71 access
+- [ ] PLD decode: use logic analyzer on RTC_WR# (U1-17) and RTC_DS# (U1-20) —
+      RTC_WR# should pulse LOW only during OUT 71h; RTC_DS# only during IN 71h
 - [ ] PLD non-decode: verify COM1_CS#, COM2_CS#, PRN_CS# never go LOW
-      (EN pulled high = disabled)
-- [ ] BUF_EN#: should match RTC_CS# timing (only RTC active on prototype)
-- [ ] RTC_AS: should be HIGH during port 0x70 access, LOW during port 0x71
+- [ ] BUF_EN#: should go LOW during port 0x70 and 0x71 access
+- [ ] DS12885 CS# (pin 13): verify wired to GND
+- [ ] RTC_AS: should pulse HIGH only during IOW# active phase of port 0x70
+      write; should stay LOW during port 0x71 access and all non-RTC cycles
 - [ ] Direction: verify 74245 DIR follows IOR# correctly
 - [ ] RTC read: `I 71` after `O 70 00` returns changing seconds value
 - [ ] RTC write: can set time, read back matches

@@ -8,7 +8,8 @@ An 8-bit ISA expansion card providing a parallel port, two serial ports, and a b
 - **2 × Serial Port (COM)** — 16450/16550-compatible UARTs, RS-232 levels via GD75232N
 - **Real-Time Clock (RTC)** — DS12885 with CR2032 battery backup and CMOS RAM
 - **Single-chip address decoding** — ATF22V10 PLD, no additional logic gates
-- **Fully jumper-configurable** — port addresses, IRQs, per-device enable/disable
+- **Fully jumper-configurable** — port addresses and IRQs
+- **Socket-based device enable/disable** — devices disabled by removing chip from socket; 10k pull-up resistor network on data bus ensures clean 0xFF reads for empty sockets
 
 ## Target Systems
 
@@ -59,14 +60,14 @@ The DS12885 uses a **multiplexed** address/data bus (AD0–AD7). The same eight 
 
 On the ISA bus, address and data are already demultiplexed onto separate buses (A0–A19 and D0–D7). Since AD0–AD7 is connected to the ISA data bus (D0–D7 via the 74HCT245), the CPU data written to port 0x70 becomes the DS12885's internal register address. The ISA address bit A0 distinguishes the two ports:
 
-| ISA Port | A0 | AS = !A0 | DS12885 phase | Operation |
+| ISA Port | A0 | AS (RTCALE) | DS12885 phase | Operation |
 |----------|----|---------|----|---|
-| 0x70 | 0 | **1 (HIGH)** | Address phase | CPU data → AD0–AD7 → latched as register address |
-| 0x71 | 1 | **0 (LOW)** | Data phase | Read/write data at the previously latched register |
+| 0x70 | 0 | **pulsed HIGH during IOW#** | Address phase | CPU data → AD0–AD7 → latched as register address |
+| 0x71 | 1 | **stays LOW** | Data phase | Read/write data at the previously latched register |
 
-#### AS = !A0 Implementation
+#### AS = RTCALE Implementation
 
-The PLD generates `RTC_AS = !A0` — a simple inverter. This is safe because the DS12885 ignores AS transitions when CS is not asserted for data transfers (address latching still occurs but causes no side effects without CS).
+The PLD generates `RTCALE = !AEN & !IOW & !A0 & address_decode` — the AS signal is fully qualified with the IOW# strobe, A0=0 (port 0x70), and the RTC address decode. This ensures the address latch opens **only** during the IOW# pulse of an `OUT 70h` instruction, preventing corruption from intervening bus cycles.
 
 **Write to port 0x70 — Set RTC register address (Intel bus timing):**
 
@@ -75,57 +76,58 @@ The PLD generates `RTC_AS = !A0` — a simple inverter. This is safe because the
 
   A0 ──────┐                              ┌─────
            └──────────────────────────────┘
-  AS ─────────┐                        ┌──────
-  (!A0)       └────────────────────────┘
-           ▲                           ▲
-           │ AS rises (transparent)    │ AS falls (address latched)
-           │                           │
   CS# ──┐                                ┌────
         └────────────────────────────────┘
   R/W ────────────┐             ┌─────────────
   (IOW#)          └─────────────┘
   AD0-7           ╔═══════reg_addr════════╗
   (via 74245)     ╚═══════════════════════╝
-                  ▲                       ▲
-                  │ latch transparent,     │ latch freezes,
-                  │ reg_addr flows through │ reg_addr captured
+  AS ───────────────┐       ┌──────────────────
+  (RTCALE)          └───────┘
+                    ▲       ▲
+                    │ IOW#  │ IOW# returns HIGH
+                    │ goes  │ → AS falls
+                    │ LOW   │ → latch freezes
+                    │ → AS  │   reg_addr captured
+                    │ HIGH  │
+                    │ latch │
+                    │ opens │
 ```
 
-1. CPU places 0x70 on address bus → A0=0, PLD asserts RTC_CS# low, BUF_EN# low, RTC_AS high
-2. AS=1 → address latch is **transparent** — the register address on D0–D7 (passed through 74245 to AD0–AD7) flows into the internal address register
-3. IOW# goes LOW then HIGH → in Intel mode R/W (IOW#) pulses, but the DS12885 is still in address phase (AS HIGH); the DS12885 does **not** interpret this as a data write because the data-phase timing (tASED = 40ns after AS fall) has not been met
-4. Bus cycle ends → A0 changes → AS falls → latch **freezes**, capturing the register address that was on AD0–AD7 while AS was high
+1. CPU places 0x70 on address bus → A0=0, PLD asserts BUF_EN# low (DS12885 CS# is permanently GND)
+2. CPU drives register address on D0–D7 → through 74245 → AD0–7
+3. IOW# goes LOW → PLD asserts RTCALE HIGH (address match + A0=0 + IOW# active) → AS=1 → address latch transparent
+4. IOW# returns HIGH → RTCALE falls → AS falls → latch **freezes**, capturing the register address
+5. Between bus cycles, RTCALE stays LOW — latch cannot be corrupted
 
 **Read from port 0x71 — Read RTC register data:**
 
-1. CPU places 0x71 on address bus → A0=1, RTC_CS# low, BUF_EN# low, RTC_AS=0
+1. CPU places 0x71 on address bus → A0=1, BUF_EN# low, RTCALE=LOW
 2. AS=0 → latch stays frozen with the previously set register address
-3. IOR# goes LOW → DS pin (= IOR#) goes LOW → DS12885 drives read data onto AD0–AD7
+3. IOR# goes LOW → PLD asserts RTCRD# LOW (address match + A0=1 + IOR#) → DS12885 RD# goes LOW → DS12885 drives read data onto AD0–AD7
 4. 74245 direction = B→A (IOR#=0 → DIR=0) → data flows to ISA D0–D7
-5. IOR# goes HIGH → DS12885 releases bus, read complete
+5. IOR# goes HIGH → RTCRD# goes HIGH → DS12885 releases bus, read complete
 
 **Write to port 0x71 — Write RTC register data:**
 
-1. Same as read, but IOW# goes LOW → R/W pin LOW → data present on AD0–AD7
-2. IOW# goes HIGH → R/W rising edge → DS12885 latches write data
+1. Same addressing as read, but IOW# goes LOW → PLD asserts RTCWR# LOW (address match + A0=1 + IOW#) → DS12885 WR# goes LOW
+2. IOW# goes HIGH → RTCWR# goes HIGH → WR# rising edge → DS12885 latches write data
 
 #### Timing Compliance (from DS12885 AC specifications)
 
 | Parameter | Symbol | Min | Our design meets? |
 |-----------|--------|-----|-------------------|
-| AS high pulse width | PWASH | 60 ns | Yes — AS=1 for entire port 0x70 bus cycle (~500 ns+ on ISA) |
-| Address valid before AS fall | tASL | 30 ns | Yes — data bus is stable for entire bus cycle, well before AS falls |
+| AS high pulse width | PWASH | 60 ns | Yes — AS=HIGH for IOW# pulse width (~350 ns on ISA) |
+| Address valid before AS fall | tASL | 30 ns | Yes — data bus is stable before IOW# returns HIGH |
 | Address hold after AS fall | tAHL | 10 ns | Yes — 74245 disable propagates through PLD (~15 ns), bus hold capacitance maintains data |
-| AS fall to DS/R/W assertion | tASED | 40 ns | Yes — AS falls at end of port 0x70 cycle; DS/R/W asserts at start of port 0x71 cycle (≥200 ns apart at 4.77 MHz) |
-| CS setup before DS or R/W | tCS | 20 ns | Yes — PLD asserts CS with ~15 ns propagation; IOR#/IOW# arrives later in the bus cycle |
+| AS fall to RD#/WR# assertion | tASED | 40 ns | Yes — AS falls at end of port 0x70 cycle; RD#/WR# asserts at start of port 0x71 cycle (≥200 ns apart at 4.77 MHz) |
+| CS setup before RD# or WR# | tCS | 20 ns | Yes — CS# is permanently GND; always satisfied |
 
 #### Address Latch Integrity Between Accesses
 
-The datasheet states that *"the next rising edge on AS clears the address regardless of CS."* Since `RTC_AS = !A0`, any bus activity (including memory fetches) where A0 transitions can cause AS edges. However, this is safe in practice because:
+Since RTCALE is gated with IOW# and the full RTC address decode, the DS12885 address latch opens **only** during the IOW# pulse of an `OUT 70h` instruction. Between bus cycles, RTCALE stays LOW and the address latch remains frozen — no corruption is possible.
 
-1. **Standard BIOS access pattern** is always `OUT 70h` immediately followed by `IN/OUT 71h` — back-to-back I/O instructions with no intervening I/O to A0=0 addresses
-2. **Latch transparency** — even if AS briefly pulses between port 0x70 and 0x71 accesses, the 74245 is disabled (BUF_EN# inactive), so AD0–AD7 floats; the brief transparent window captures indeterminate data, but the very next port 0x71 access does not re-latch (AS stays LOW) so the last **driven** value from the port 0x70 write dominates due to bus capacitance
-3. **CS gating** — even if the address latch were corrupted, the DS12885 only performs data access when CS is asserted with valid DS or R/W timing. Spurious address latches during non-RTC bus cycles (where CS is deasserted) do not cause register reads or writes
+This is critical because the DS12885 datasheet states that AS-triggered address latching occurs regardless of CS state. A simpler approach like `AS = !A0` would toggle the latch during every bus cycle, re-latching whatever residual charge remains on the floating AD0-AD7 lines — an unreliable scheme that depends on bus capacitance retention.
 
 ### Oscillators
 
@@ -139,7 +141,7 @@ The datasheet states that *"the next rising edge on AS clears the address regard
 A 74HCT245 bidirectional transceiver decouples all peripheral data pins from the ISA bus:
 
 - **ISA side** (A1–A8, pins 2–9) — connected to ISA D0–D7
-- **Card side** (B1–B8, pins 11–18) — connected to RTC, UART, and PRN data pins
+- **Card side** (B1–B8, pins 11–18) — connected to RTC, UART, and PRN data pins; 8×10k pull-up resistor network to VCC ensures defined HIGH state when no device drives the bus (empty sockets read as 0xFF)
 - **DIR** — connected to IOR# (IOR#=0 → B-to-A read; IOR#=1 → A-to-B write)
 - **G#** — active-low enable driven by ATF22V10
 
@@ -168,15 +170,11 @@ See [plan.md](plan.md) for detailed PLD equations, pin assignments, and CUPL sou
 | JP_PRN_IRQ | IRQ7 | IRQ5 |
 | JP_RTC_IRQ | IRQ5 / IRQ6 / IRQ7 (1×4 header) | — |
 
-#### Device Enable (2-pin headers, active when shorted to GND)
+#### Device Enable/Disable
 
-| Jumper | Shorted | Open |
-|--------|---------|------|
-| JP_COM1_EN | COM1 enabled | COM1 disabled |
-| JP_COM2_EN | COM2 enabled | COM2 disabled |
-| JP_PRN_EN | PRN enabled | PRN disabled |
+Devices are enabled/disabled by installing or removing the chip from its DIP socket. A 10k×8 pull-up resistor network on the 74HCT245 B-side ensures that empty sockets read as 0xFF, which is the expected response for absent I/O devices. Software detection (e.g., BIOS UART scratch register test) correctly identifies the device as absent.
 
-The RTC is always enabled (no disable jumper).
+The RTC is always enabled (no disable mechanism).
 
 ## Manufacturing Notes
 

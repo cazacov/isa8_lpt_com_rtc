@@ -1,8 +1,8 @@
 GAL22V10
 ISA8DEC
 
-AEN    A0     A3     A4     A5     A6     A7     A8     A9     JCOM1  JCOM2  GND
-JPRN   COM1   COM2   PRN    RTC    BUFEN  RTCAS  ENPRN  ECOM2  ECOM1  NC     VCC
+A0     A2     A3     A4     A5     A6     A7     A8     A9     IOR    IOW    GND
+AEN    COM1   COM2   PRN    RTCWR  BUFEN  RTCAS  RTCDS  JCOM1  JCOM2  JPRN   VCC
 
 ; =================================================================
 ; ISA8 LPT/COM/RTC Address Decoder
@@ -11,9 +11,10 @@ JPRN   COM1   COM2   PRN    RTC    BUFEN  RTCAS  ENPRN  ECOM2  ECOM1  NC     VCC
 ; Date:   2026-02-20
 ;
 ; This PLD decodes ISA bus I/O port addresses and generates active-low
-; chip-select signals for four peripherals (2x UART, 1x PRN, 1x RTC)
-; plus an active-low bus buffer enable for a 74HCT245, and an active-
-; high address strobe for the DS12885 RTC.
+; chip-select signals for three peripherals (2x UART, 1x PRN), plus
+; active-low RTC read/write strobes for the DS12885 (whose CS# is tied
+; to GND), an active-low bus buffer enable for a 74HCT245, and an
+; active-high address latch enable for the DS12885 RTC.
 ;
 ; All outputs are purely combinational (no registered/clocked logic).
 ;
@@ -21,8 +22,8 @@ JPRN   COM1   COM2   PRN    RTC    BUFEN  RTCAS  ENPRN  ECOM2  ECOM1  NC     VCC
 ; Pin Assignments
 ; -----------------------------------------------------------------
 ;
-; Pin  1  AEN     - ISA DMA cycle indicator (HIGH during DMA, must be LOW for I/O)
-; Pin  2  A0      - ISA address bit 0 (used for RTC port 0x70 vs 0x71)
+; Pin  1  A0      - ISA address bit 0 (used for RTC port 0x70 vs 0x71)
+; Pin  2  A2      - ISA address bit 2 (used for precise RTC decode)
 ; Pin  3  A3      - ISA address bit 3
 ; Pin  4  A4      - ISA address bit 4
 ; Pin  5  A5      - ISA address bit 5
@@ -30,20 +31,20 @@ JPRN   COM1   COM2   PRN    RTC    BUFEN  RTCAS  ENPRN  ECOM2  ECOM1  NC     VCC
 ; Pin  7  A7      - ISA address bit 7
 ; Pin  8  A8      - ISA address bit 8 (switching bit for all configurable ports)
 ; Pin  9  A9      - ISA address bit 9
-; Pin 10  JCOM1  - Jumper: COM1 addr select (1=0x3F8/COM1, 0=0x2F8/COM2)
-; Pin 11  JCOM2  - Jumper: COM2 addr select (1=0x3E8/COM3, 0=0x2E8/COM4)
+; Pin 10  IOR     - ISA IOR# (active low, I/O read strobe)  [dedicated input]
+; Pin 11  IOW     - ISA IOW# (active low, I/O write strobe) [dedicated input]
 ; Pin 12  GND
-; Pin 13  JPRN    - Jumper: PRN addr select   (1=0x378/LPT1, 0=0x278/LPT2)
+; Pin 13  AEN     - ISA DMA cycle indicator (HIGH during DMA, must be LOW for I/O)
 ; Pin 14  COM1   - /COM1_CS output (active low) -> 16C450 #1 CS2
 ; Pin 15  COM2   - /COM2_CS output (active low) -> 16C450 #2 CS2
 ; Pin 16  PRN     - /PRN_CS output (active low)   -> UM82C11-C CS
-; Pin 17  RTC     - /RTC_CS output (active low)    -> DS12885 CS
+; Pin 17  RTCWR   - /RTC_WR output (active low)   -> DS12885 WR# (Intel mode pin 15)
 ; Pin 18  BUFEN   - /BUF_EN output (active low)   -> 74HCT245 G#
-; Pin 19  RTCAS   - RTC_AS output (active high)    -> DS12885 AS
-; Pin 20  ENPRN   - Enable PRN input  (active low: LOW=enabled, pull-up when open)
-; Pin 21  ECOM2  - Enable COM2 input (active low: LOW=enabled, pull-up when open)
-; Pin 22  ECOM1  - Enable COM1 input (active low: LOW=enabled, pull-up when open)
-; Pin 23  NC      - spare
+; Pin 19  RTCAS   - RTC AS output (active high)    -> DS12885 AS  (Intel mode pin 14)
+; Pin 20  RTCDS   - /RTC_DS output (active low)   -> DS12885 DS# (Intel mode pin 17)
+; Pin 21  JCOM1  - Jumper: COM1 addr select (1=0x3F8/COM1, 0=0x2F8/COM2)
+; Pin 22  JCOM2  - Jumper: COM2 addr select (1=0x3E8/COM3, 0=0x2E8/COM4)
+; Pin 23  JPRN    - Jumper: PRN addr select   (1=0x378/LPT1, 0=0x278/LPT2)
 ; Pin 24  VCC
 ;
 ; -----------------------------------------------------------------
@@ -57,7 +58,7 @@ JPRN   COM1   COM2   PRN    RTC    BUFEN  RTCAS  ENPRN  ECOM2  ECOM1  NC     VCC
 ;   0x2E8    COM4    1  0  1  1  1  0  1              JCOM2=0
 ;   0x378    LPT1    1  1  0  1  1  1  1    JPRN=1
 ;   0x278    LPT2    1  0  0  1  1  1  1              JPRN=0
-;   0x070    RTC     0  0  0  1  1  1  0    (fixed, no jumper)
+;   0x070    RTC     0  0  0  1  1  1  0  0  (fixed, no jumper)  [A2 also checked]
 ;
 ; Key insight: all three configurable devices differ only in A8 between
 ; their two address options. The XNOR(A8, Jxxx) is expanded as two
@@ -68,54 +69,60 @@ JPRN   COM1   COM2   PRN    RTC    BUFEN  RTCAS  ENPRN  ECOM2  ECOM1  NC     VCC
 ; 0x3F8: A9=1 A8=1 A7=1 A6=1 A5=1 A4=1 A3=1  (JCOM1=1)
 ; 0x2F8: A9=1 A8=0 A7=1 A6=1 A5=1 A4=1 A3=1  (JCOM1=0)
 ; Common: A9=1, A7..A3=11111; differ in A8 matched via XNOR(A8, JCOM1)
-/COM1 = /AEN * /ECOM1 * A9 *  A8 *  JCOM1 * A7 * A6 * A5 * A4 * A3
-       + /AEN * /ECOM1 * A9 * /A8 * /JCOM1 * A7 * A6 * A5 * A4 * A3
+/COM1 = /AEN * A9 *  A8 *  JCOM1 * A7 * A6 * A5 * A4 * A3
+       + /AEN * A9 * /A8 * /JCOM1 * A7 * A6 * A5 * A4 * A3
 
 ; --- COM2 chip select (active low) ---
 ; 0x3E8: A9=1 A8=1 A7=1 A6=1 A5=1 A4=0 A3=1  (JCOM2=1)
 ; 0x2E8: A9=1 A8=0 A7=1 A6=1 A5=1 A4=0 A3=1  (JCOM2=0)
 ; Common: A9=1, A7=1, A6=1, A5=1, A4=0, A3=1; differ in A8
-/COM2 = /AEN * /ECOM2 * A9 *  A8 *  JCOM2 * A7 * A6 * A5 * /A4 * A3
-       + /AEN * /ECOM2 * A9 * /A8 * /JCOM2 * A7 * A6 * A5 * /A4 * A3
+/COM2 = /AEN * A9 *  A8 *  JCOM2 * A7 * A6 * A5 * /A4 * A3
+       + /AEN * A9 * /A8 * /JCOM2 * A7 * A6 * A5 * /A4 * A3
 
 ; --- PRN chip select (active low) ---
 ; 0x378: A9=1 A8=1 A7=0 A6=1 A5=1 A4=1 A3=1  (JPRN=1)
 ; 0x278: A9=1 A8=0 A7=0 A6=1 A5=1 A4=1 A3=1  (JPRN=0)
 ; Common: A9=1, A7=0, A6=1, A5=1, A4=1, A3=1; differ in A8
-/PRN   = /AEN * /ENPRN * A9 *  A8 *  JPRN * /A7 * A6 * A5 * A4 * A3
-       + /AEN * /ENPRN * A9 * /A8 * /JPRN * /A7 * A6 * A5 * A4 * A3
+/PRN   = /AEN * A9 *  A8 *  JPRN * /A7 * A6 * A5 * A4 * A3
+       + /AEN * A9 * /A8 * /JPRN * /A7 * A6 * A5 * A4 * A3
 
-; --- RTC chip select (active low) ---
-; 0x70-0x71: A9=0 A8=0 A7=0 A6=1 A5=1 A4=1 A3=0
-; No enable jumper, no address jumper - always active at this fixed address.
-; A0 is NOT checked here (both 0x70 and 0x71 must assert CS).
-/RTC   = /AEN * /A9 * /A8 * /A7 * A6 * A5 * A4 * /A3
+; --- RTC Write Strobe (active low) ---
+; Directly drives DS12885 WR# (Intel mode pin 15).
+; Fires during OUT to port 0x71 (data register: A0=1).
+; DS12885 CS# is tied to GND (always selected).
+; Uses 1 product term (16 available on pin 17).
+/RTCWR = /AEN * /IOW * A0 * /A2 * /A9 * /A8 * /A7 * A6 * A5 * A4 * /A3
 
 ; --- 74HCT245 bus buffer enable (active low) ---
-; Asserted when ANY chip select is active.
-; All CS product terms are duplicated here (no feedback from outputs)
-; to ensure zero additional propagation delay and no timing hazards.
+; Asserted when any device's address range is active on the bus.
+; All address-match product terms are duplicated here (no feedback
+; from outputs) to ensure zero additional propagation delay.
 ; Uses 7 product terms (16 available on pin 18).
-/BUFEN = /AEN * /ECOM1 * A9 *  A8 *  JCOM1 * A7 * A6 * A5 * A4 * A3
-       + /AEN * /ECOM1 * A9 * /A8 * /JCOM1 * A7 * A6 * A5 * A4 * A3
-       + /AEN * /ECOM2 * A9 *  A8 *  JCOM2 * A7 * A6 * A5 * /A4 * A3
-       + /AEN * /ECOM2 * A9 * /A8 * /JCOM2 * A7 * A6 * A5 * /A4 * A3
-       + /AEN * /ENPRN  * A9 *  A8 *  JPRN   * /A7 * A6 * A5 * A4 * A3
-       + /AEN * /ENPRN  * A9 * /A8 * /JPRN   * /A7 * A6 * A5 * A4 * A3
-       + /AEN * /A9 * /A8 * /A7 * A6 * A5 * A4 * /A3
+/BUFEN = /AEN * A9 *  A8 *  JCOM1 * A7 * A6 * A5 * A4 * A3
+       + /AEN * A9 * /A8 * /JCOM1 * A7 * A6 * A5 * A4 * A3
+       + /AEN * A9 *  A8 *  JCOM2 * A7 * A6 * A5 * /A4 * A3
+       + /AEN * A9 * /A8 * /JCOM2 * A7 * A6 * A5 * /A4 * A3
+       + /AEN * A9 *  A8 *  JPRN  * /A7 * A6 * A5 * A4 * A3
+       + /AEN * A9 * /A8 * /JPRN  * /A7 * A6 * A5 * A4 * A3
+       + /AEN * /A2 * /A9 * /A8 * /A7 * A6 * A5 * A4 * /A3
 
-; --- RTC address strobe (active high) ---
-; AS = /A0: HIGH when A0=0 (port 0x70 = address/latch phase)
-;           LOW  when A0=1 (port 0x71 = data phase)
-; Per datasheet, address latching via AS occurs regardless of CS state
-; ("Bus cycles without CS will latch addresses, but no access occurs").
-; Since data access requires CS, spurious AS edges during non-RTC bus
-; activity are harmless. No address matching needed - just an inverter.
-RTCAS  = /A0
+; --- RTC Address Strobe (active high) ---
+; Drives DS12885 AS (Intel mode pin 14). Goes HIGH only during a CPU
+; write to port 0x70 (address register: A0=0), gated with IOW# and
+; full address decode. When IOW# returns HIGH, RTCAS falls and the
+; address latch freezes with the correct register address.
+RTCAS = /AEN * /IOW * /A0 * /A2 * /A9 * /A8 * /A7 * A6 * A5 * A4 * /A3
+
+; --- RTC Data Strobe (active low) ---
+; Directly drives DS12885 DS# (Intel mode pin 17).
+; Fires during IN from port 0x71 (data register: A0=1).
+; Uses 1 product term (12 available on pin 20).
+/RTCDS = /AEN * /IOR * A0 * /A2 * /A9 * /A8 * /A7 * A6 * A5 * A4 * /A3
 
 DESCRIPTION
 ISA8 multi-I/O card address decoder.
-Active-low chip selects for COM1, COM2, PRN, RTC.
+Active-low chip selects for COM1, COM2, PRN.
+Active-low RTC write/data strobes (DS12885 CS# tied to GND).
 Active-low buffer enable for 74HCT245.
 Active-high address strobe for DS12885 RTC.
-Jumper-configurable port addresses and device enable/disable.
+Jumper-configurable port addresses.
