@@ -48,7 +48,9 @@ Both ports use 16450/16550-compatible UARTs with RS-232 level shifting (GD75232N
 - CR2032 battery backup
 - Fixed I/O ports 0x70 (address) / 0x71 (data)
 - Intel bus timing (MOT pin left unconnected; internal 20kΩ pull-down selects Intel mode)
-- Configurable interrupt: IRQ5, IRQ6, or IRQ7
+- Configurable interrupt: IRQ2/9, IRQ5, IRQ6, or IRQ7
+- IRQ polarity inversion: DS12885 IRQ output is active-low open-drain; an NPN transistor (Q1, 2N3904) with a 330Ω series current-limiting resistor converts it to the active-high signal expected by the ISA bus 8259A PIC (see [plan.md](plan.md) Section 6 for circuit details)
+- On PC/XT (single 8259A), the IRQ2 jumper position triggers IRQ2 (INT 0Ah); on AT-class systems (cascaded 8259A), the same physical IRQ2 line is routed to the slave PIC as IRQ9 (INT 71h), which the BIOS redirects to INT 0Ah for compatibility
 
 #### Multiplexed Address/Data Bus and Address Latching
 
@@ -168,7 +170,7 @@ See [plan.md](plan.md) for detailed PLD equations, pin assignments, and CUPL sou
 | JP_COM1_IRQ | IRQ4 | IRQ3 |
 | JP_COM2_IRQ | IRQ4 | IRQ3 |
 | JP_PRN_IRQ | IRQ7 | IRQ5 |
-| JP_RTC_IRQ | IRQ5 / IRQ6 / IRQ7 (1×4 header) | — |
+| JP_RTC_IRQ | IRQ2/9 / IRQ5 / IRQ6 / IRQ7 (1×5 header) | — |
 
 #### Device Enable/Disable
 

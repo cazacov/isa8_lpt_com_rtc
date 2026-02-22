@@ -64,16 +64,19 @@ IRQ routing does NOT go through the PLD. Use simple 3-pin jumper headers connect
 | J_IRQ_COM1 | IRQ4 | IRQ3 | Standard COM1=IRQ4, COM2=IRQ3 |
 | J_IRQ_COM2 | IRQ4 | IRQ3 | Standard COM3=IRQ4, COM4=IRQ3 |
 | J_IRQ_PRN | IRQ7 | IRQ5 | Standard LPT1=IRQ7, LPT2=IRQ5 |
-| J_IRQ_RTC | IRQ7 / IRQ6 / IRQ5 | — | 4-pin header, jumper selects one of 3 |
+| J_IRQ_RTC | IRQ2/9 / IRQ5 / IRQ6 / IRQ7 | — | 5-pin header, jumper selects one of 4 |
 
-For the RTC IRQ (3 choices: IRQ5, IRQ6, IRQ7), use a 1x4 pin header:
+For the RTC IRQ (4 choices: IRQ2/9, IRQ5, IRQ6, IRQ7), use a 1×5 pin header:
 ```
-Pin 1: RTC_IRQ (from DS12885 IRQ pin, active low with external pull-up)
-Pin 2: IRQ5
-Pin 3: IRQ6
-Pin 4: IRQ7
+Pin 1: RTC_IRQ_OUT (from Q1 collector via R4, active high — inverted from DS12885)
+Pin 2: IRQ2 (= IRQ9 on AT-class machines via cascade)
+Pin 3: IRQ5
+Pin 4: IRQ6
+Pin 5: IRQ7
 ```
-A single jumper wire connects Pin 1 to one of Pins 2-4.
+A single jumper wire connects Pin 1 to one of Pins 2–5.
+
+**Note:** On PC/XT systems (single 8259A), the IRQ2 pin triggers IRQ2 (INT 0Ah) directly. On AT-class systems (cascaded 8259A), the same physical IRQ2 line is routed to the slave PIC IR1 input, generating IRQ9 (INT 71h). The AT BIOS redirects INT 71h → INT 0Ah for compatibility.
 
 ### 3.3 Jumper Summary Table
 
@@ -85,7 +88,7 @@ A single jumper wire connects Pin 1 to one of Pins 2-4.
 | JP_COM2_IRQ | 3-pin header | 1=IRQ4, 2=COM2_IRQ, 3=IRQ3 | Select IRQ |
 | JP_PRN_ADDR | 3-pin header | 1=VCC, 2=J_PRN, 3=GND | Cap 1-2: 0x378 (LPT1), Cap 2-3: 0x278 (LPT2) |
 | JP_PRN_IRQ | 3-pin header | 1=IRQ7, 2=PRN_IRQ, 3=IRQ5 | Select IRQ |
-| JP_RTC_IRQ | 1x4 header | 1=RTC_IRQ, 2=IRQ5, 3=IRQ6, 4=IRQ7 | Jumper wire Pin1 to one of Pin2-4 |
+| JP_RTC_IRQ | 1×5 header | 1=RTC_IRQ_OUT, 2=IRQ2/9, 3=IRQ5, 4=IRQ6, 5=IRQ7 | Jumper wire Pin1 to one of Pin2–5 |
 
 ### 3.4 Device Enable/Disable
 
@@ -163,7 +166,7 @@ Intel bus timing mode is selected by leaving MOT pin unconnected (internal 20k p
 | DS# | Data strobe | RTC_DS# from ATF22V10 — active-low, fires only during IN from port 0x71 |
 | WR# | Write strobe | RTC_WR# from ATF22V10 — active-low, fires only during OUT to port 0x71 |
 | RESET | Reset | Tie to VCC (per datasheet: allows power-fail transitions without clearing control registers) |
-| IRQ | Interrupt out | Open-drain, connected via jumper to IRQ5/6/7, needs 4.7k pull-up to VCC |
+| IRQ | Interrupt out | Open-drain, inverted via NPN transistor (Q1) to active-high; output via R4 (330Ω) to jumper JP_RTC_IRQ selecting IRQ2/9, IRQ5, IRQ6, or IRQ7 (see Section 6) |
 | SQW | Square wave | Leave unconnected or route to test point |
 | X1, X2 | Crystal | 32.768 kHz crystal (Y1) |
 | VCC | Power | +5V from ISA bus |
@@ -208,9 +211,47 @@ Since RTC_AS is gated with IOW# and the full RTC address decode, the DS12885 add
 
 This is critical because the DS12885 datasheet states that AS-triggered address latching occurs regardless of CS state. A simpler approach like `AS = !A0` would toggle the latch during every bus cycle, re-latching whatever residual charge remains on the floating AD0-AD7 lines — an unreliable scheme that depends on bus capacitance retention across multiple instruction fetch cycles.
 
-## 6. 74245 Bus Buffer
+## 6. RTC IRQ Polarity Inversion
 
-### 6.1 Connections
+The DS12885 IRQ output is **active-low, open-drain** — it pulls LOW to assert an interrupt and floats (high-impedance) when idle. ISA bus IRQ lines (IRQ2–7) are **active-high, edge-triggered** — the 8259A PIC requires a LOW→HIGH transition to recognize an interrupt. An NPN transistor inverts the polarity.
+
+### Circuit
+
+![RTC IRQ Polarity Inversion — NPN Inverter](_img/rtc_irq_inverter.svg)
+
+### Operation
+
+| DS12885 state | IRQ pin | NPN Q1 | Q1 collector | ISA IRQ line | Result |
+|---|---|---|---|---|---|
+| No interrupt | HIGH (pull-up R1) | ON (saturated) | LOW (~0.2V) | LOW (idle) | Correct — no interrupt |
+| Interrupt active | LOW (open-drain pulls down) | OFF | HIGH (pull-up R3) | HIGH via R4 | Correct — interrupt asserted |
+
+### Component Values
+
+| Ref | Value | Purpose |
+|---|---|---|
+| R1 | 4.7kΩ | Pull-up for DS12885 open-drain IRQ output |
+| R2 | 4.7kΩ | NPN base current limiter; $I_B = (5 - 0.7) / 4.7\text{k} \approx 0.9\text{mA}$ — sufficient to saturate |
+| R3 | 4.7kΩ | Collector pull-up to VCC; provides active-high output when Q1 is OFF |
+| R4 | 330Ω | Series current limiter between collector and ISA IRQ line — protects against bus contention if another card accidentally drives the same IRQ |
+| Q1 | 2N3904 | NPN transistor (TO-92); any general-purpose NPN (BC547, 2N2222) works |
+
+### Contention Protection
+
+R4 (330Ω) limits current if another ISA card drives the same IRQ line HIGH while Q1 is ON (sinking to GND). Worst case: $(3.5 - 0.2)\text{V} / 330\Omega \approx 10\text{mA}$ — well within safe limits for both the NPN and the other card's output stage.
+
+### Signal Integrity
+
+- **HIGH delivery** (interrupt active, Q1 OFF): 4.7kΩ pull-up through 330Ω to the 8259A input (~40µA draw). Voltage drop across R4 ≈ 0.013V — negligible. ISA IRQ sees ~4.9V, well above $V_{IH} = 2.0\text{V}$.
+- **LOW delivery** (idle, Q1 ON): $V_{CE(sat)} \approx 0.2\text{V}$ plus negligible drop across R4. ISA IRQ sees ~0.2V, well below $V_{IL} = 0.8\text{V}$.
+
+### Behavioral Consistency with UART/PRN IRQ Outputs
+
+The 16450/16550 UART INTRPT and UM82C11 IRQ outputs are totem-pole (push-pull, active-high). The NPN inverter produces identical bus behavior: actively drives LOW when idle, drives HIGH when interrupting. This is standard for ISA 8-bit cards and consistent across all four device IRQ outputs on this card.
+
+## 7. 74245 Bus Buffer
+
+### 7.1 Connections
 
 | 74245 Pin | Signal | Connection |
 |---|---|---|
@@ -219,16 +260,16 @@ This is critical because the DS12885 datasheet states that AS-triggered address 
 | DIR (pin 1) | Direction | Connected to IOR# from ISA bus |
 | G# (pin 19) | Enable | BUF_EN# from ATF22V10 |
 
-### 6.2 Direction Logic
+### 7.2 Direction Logic
 
 - IOR# = 0 (I/O read active): DIR = 0 → B-to-A (device → ISA bus)
 - IOR# = 1 (idle or I/O write): DIR = 1 → A-to-B (ISA bus → device)
 
-### 6.3 Enable Logic
+### 7.3 Enable Logic
 
 G# (BUF_EN#) is active low. The 74245 is enabled only when a device on this card is being addressed, preventing bus conflicts with other ISA cards.
 
-## 7. Bill of Materials (Logic Section)
+## 8. Bill of Materials (Logic Section)
 
 | Ref | Component | Package | Qty | Purpose |
 |---|---|---|---|---|
@@ -242,11 +283,15 @@ G# (BUF_EN#) is active low. The 74245 is enabled only when a device on this card
 | Y2 | 1.8432 MHz oscillator | DIP-8/14 | 1 | UART clock |
 | BT1 | CR2032 holder | Through-hole | 1 | RTC battery backup |
 | RN1 | 10k×8 SIP resistor network | SIP-9 | 1 | Pull-up for 74HCT245 B-side (active device side) |
-| R4 | 4.7k resistor | Axial | 1 | Pull-up for DS12885 IRQ (open-drain) |
+| Q1 | 2N3904 | TO-92 | 1 | NPN transistor — RTC IRQ polarity inverter |
+| R1 | 4.7k resistor | Axial | 1 | Pull-up for DS12885 IRQ (open-drain) |
+| R2 | 4.7k resistor | Axial | 1 | NPN base current limiter |
+| R3 | 4.7k resistor | Axial | 1 | NPN collector pull-up |
+| R4 | 330Ω resistor | Axial | 1 | Series current limiter — contention protection |
 | R5-R7 | 10k resistor | Axial | 3 | Pull-down for J_xxx addr jumpers |
 | JP1-JP7 | Pin headers | 2.54mm | Various | Jumper configuration headers |
 
-## 8. Schematic Block Diagram
+## 9. Schematic Block Diagram
 
 ```
                     ISA 8-bit Bus
@@ -300,7 +345,7 @@ G# (BUF_EN#) is active low. The 74245 is enabled only when a device on this card
                                                     To ISA IRQ lines
 ```
 
-## 9. Implementation Steps
+## 10. Implementation Steps
 
 1. **Create KiCad schematic** with all components
 2. **Program ATF22V10** with CUPL equations using a programmer (e.g., TL866II+)
@@ -308,7 +353,7 @@ G# (BUF_EN#) is active low. The 74245 is enabled only when a device on this card
 4. **PCB layout** following standard ISA card dimensions (XT 8-bit: 4.8" x 3.7" approx)
 5. **Test each subsystem** independently (RTC first, then UARTs, then PRN)
 
-## 10. Design Notes and Caveats
+## 11. Design Notes and Caveats
 
 - The ATF22V10C-15PU (15ns) is fast enough for ISA bus timing (ISA bus cycle ~500ns minimum).
 - All address jumper pull-down resistors (10k) ensure a defined state when no jumper cap is installed (defaults to Option B / lower address).
@@ -318,9 +363,9 @@ G# (BUF_EN#) is active low. The 74245 is enabled only when a device on this card
 - The 74HCT245 variant (not 74HC245) is recommended for proper TTL-level compatibility with the ISA bus.
 - CR2032 battery: connect positive terminal to DS12885 VBAT, negative to GND. Add a series diode (1N4148) or Schottky diode to prevent reverse charging (optional, DS12885 is UL recognized for this).
 
-## 11. ATF22V10 Chip Logic — Detailed Analysis
+## 12. ATF22V10 Chip Logic — Detailed Analysis
 
-### 11.1 XNOR Address Matching
+### 12.1 XNOR Address Matching
 
 For each configurable device (COM1, COM2, PRN), the two alternative base addresses differ only in A8. The PLD uses XNOR(A8, J_xxx) to check whether the bus address matches the jumper setting:
 
@@ -328,7 +373,7 @@ $$\text{A8\_MATCH} = \text{A8} \odot \text{J\_xxx} = (\text{A8} \cdot \text{J\_x
 
 Since the ATF22V10 cannot express XNOR as a single gate, each chip-select equation expands into two product terms (one for A8=1∧J=1, one for A8=0∧J=0). The remaining address bits (A9, A7–A3) are checked against fixed expected values. Every equation also requires AEN=0 (not a DMA cycle).
 
-### 11.2 PLD Equations
+### 12.2 PLD Equations
 
 **COM1** (0x3F8 or 0x2F8 — fixed bits: A9=1, A7–A3=11111):
 
@@ -381,7 +426,7 @@ RTC_AS = /AEN * /IOW * /A0 * /A2 * /A9 * /A8 * /A7 * A6 * A5 * A4 * /A3
 /RTC_DS = /AEN * /IOR * A0 * /A2 * /A9 * /A8 * /A7 * A6 * A5 * A4 * /A3
 ```
 
-### 11.3 Product Term Budget
+### 12.3 Product Term Budget
 
 | Output Pin | Signal | Available PTs | Used PTs | Utilization |
 |------------|--------|---------------|----------|-------------|
@@ -398,7 +443,7 @@ RTC_AS = /AEN * /IOW * /A0 * /A2 * /A9 * /A8 * /A7 * A6 * A5 * A4 * /A3
 
 Total: **16 product terms** used, substantial headroom on all pins.
 
-### 11.4 CUPL Source
+### 12.4 CUPL Source
 
 ```cupl
 Name     ISA8_DECODE;

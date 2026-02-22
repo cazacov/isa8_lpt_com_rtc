@@ -1,0 +1,153 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 620 480" font-family="Consolas, 'Courier New', monospace" font-size="12">
+  <style>
+    .wire { stroke: #222; stroke-width: 1.5; fill: none; }
+    .comp { stroke: #222; stroke-width: 1.5; fill: none; }
+    .label { font-size: 11px; fill: #222; }
+    .ref { font-size: 11px; fill: #b00; font-weight: bold; }
+    .val { font-size: 10px; fill: #006; }
+    .pin { font-size: 10px; fill: #555; }
+    .node { fill: #222; }
+    .vcc { font-size: 11px; fill: #c00; font-weight: bold; }
+    .gnd { font-size: 11px; fill: #060; font-weight: bold; }
+    .title { font-size: 14px; fill: #222; font-weight: bold; }
+    .netlabel { font-size: 12px; fill: #c00; font-weight: bold; }
+  </style>
+
+  <!-- White background -->
+  <rect x="0" y="0" width="620" height="480" fill="#fff"/>
+
+  <!-- Title -->
+  <text x="310" y="24" text-anchor="middle" class="title">RTC IRQ Polarity Inversion — NPN Inverter</text>
+
+  <!-- =========== DS12885 on the far left =========== -->
+
+  <!-- DS12885 box -->
+  <rect x="15" y="155" width="80" height="50" rx="4" class="comp" stroke-width="1.8"/>
+  <text x="55" y="175" text-anchor="middle" class="ref">DS12885</text>
+  <text x="55" y="191" text-anchor="middle" class="pin">IRQ (pin 21)</text>
+  <text x="55" y="222" text-anchor="middle" class="val" style="font-style: italic;">open-drain</text>
+
+  <!-- Horizontal wire from DS12885 IRQ to junction -->
+  <line x1="95" y1="180" x2="155" y2="180" class="wire"/>
+
+  <!-- IRQ# label -->
+  <text x="125" y="174" text-anchor="middle" class="label">IRQ#</text>
+
+  <!-- =========== R1 pull-up (vertical, above junction) =========== -->
+
+  <!-- VCC symbol for R1 (aligned with right VCC at y=42/46) -->
+  <line x1="155" y1="46" x2="155" y2="58" class="wire"/>
+  <text x="155" y="42" text-anchor="middle" class="vcc">VCC</text>
+  <line x1="145" y1="46" x2="165" y2="46" class="wire"/>
+
+  <!-- R1 (vertical resistor) -->
+  <line x1="155" y1="58" x2="155" y2="66" class="wire"/>
+  <rect x="147" y="66" width="16" height="48" rx="2" class="comp"/>
+  <text x="171" y="86" class="ref">R1</text>
+  <text x="171" y="100" class="val">4.7kΩ</text>
+  <line x1="155" y1="114" x2="155" y2="180" class="wire"/>
+
+  <!-- Junction node (R1 / DS12885 / R2 meet) -->
+  <circle cx="155" cy="180" r="3" class="node"/>
+
+  <!-- =========== R2: horizontal at y=180 (Q1 base level) =========== -->
+
+  <!-- Wire from junction to R2 -->
+  <line x1="155" y1="180" x2="190" y2="180" class="wire"/>
+
+  <!-- R2 (horizontal resistor at y=180, 48×16 matching R1) -->
+  <rect x="190" y="172" width="48" height="16" rx="2" class="comp"/>
+  <text x="214" y="166" text-anchor="middle" class="ref">R2</text>
+  <text x="214" y="203" text-anchor="middle" class="val">4.7kΩ</text>
+
+  <!-- Wire from R2 straight to Q1 base bar — fully horizontal -->
+  <line x1="238" y1="180" x2="358" y2="180" class="wire"/>
+
+  <!-- =========== Q1 NPN transistor (2N3904) =========== -->
+
+  <!-- Transistor body circle (center 370,180 r=32) -->
+  <circle cx="370" cy="180" r="32" class="comp" stroke-width="1.2"/>
+  <text x="370" y="226" text-anchor="middle" class="ref">Q1</text>
+  <text x="370" y="240" text-anchor="middle" class="val">2N3904</text>
+
+  <!-- Base vertical bar (closer to center, at x=358) -->
+  <line x1="358" y1="163" x2="358" y2="197" class="wire" stroke-width="2.5"/>
+
+  <!-- Collector diagonal (bar → near circle edge upper-right) -->
+  <line x1="358" y1="167" x2="390" y2="155" class="wire"/>
+  <!-- Collector vertical wire (from inflection up through circle to junction) -->
+  <line x1="390" y1="155" x2="390" y2="130" class="wire"/>
+
+  <!-- Emitter diagonal (bar → near circle edge lower-right) -->
+  <line x1="358" y1="193" x2="390" y2="205" class="wire"/>
+  <!-- Emitter arrow (solid, pointing outward from bar toward circle edge) -->
+  <polygon points="390,205 381,196 377,206" fill="#222"/>
+  <!-- Emitter vertical wire (from inflection down through circle to GND) -->
+  <line x1="390" y1="205" x2="390" y2="260" class="wire"/>
+
+  <!-- Pin labels -->
+  <text x="346" y="185" text-anchor="end" class="pin">B</text>
+  <text x="400" y="152" class="pin">C</text>
+  <text x="400" y="216" class="pin">E</text>
+
+  <!-- =========== GND at emitter =========== -->
+  <line x1="380" y1="260" x2="400" y2="260" class="wire"/>
+  <line x1="383" y1="265" x2="397" y2="265" class="wire"/>
+  <line x1="386" y1="270" x2="394" y2="270" class="wire"/>
+  <text x="390" y="286" text-anchor="middle" class="gnd">GND</text>
+
+  <!-- =========== R3: from VCC down to collector =========== -->
+
+  <!-- VCC for R3 -->
+  <line x1="390" y1="46" x2="390" y2="52" class="wire"/>
+  <text x="390" y="42" text-anchor="middle" class="vcc">VCC</text>
+  <line x1="380" y1="46" x2="400" y2="46" class="wire"/>
+
+  <!-- R3 vertical resistor (16×48 matching R1) -->
+  <line x1="390" y1="52" x2="390" y2="56" class="wire"/>
+  <rect x="382" y="56" width="16" height="48" rx="2" class="comp"/>
+  <text x="406" y="76" class="ref">R3</text>
+  <text x="406" y="90" class="val">4.7kΩ</text>
+
+  <!-- Wire from R3 bottom to junction -->
+  <line x1="390" y1="104" x2="390" y2="130" class="wire"/>
+
+  <!-- Junction at crossing of R3, R4, and Q1 collector -->
+  <circle cx="390" cy="130" r="3" class="node"/>
+
+  <!-- =========== R4: from junction, down then right =========== -->
+
+  <!-- Wire right from junction to R4 -->
+  <line x1="390" y1="130" x2="430" y2="130" class="wire"/>
+
+  <!-- R4 horizontal resistor (48×16 matching R1) -->
+  <rect x="430" y="122" width="48" height="16" rx="2" class="comp"/>
+  <text x="454" y="116" text-anchor="middle" class="ref">R4</text>
+  <text x="454" y="153" text-anchor="middle" class="val">330Ω</text>
+
+  <!-- Wire from R4 to net label -->
+  <line x1="478" y1="130" x2="540" y2="130" class="wire"/>
+
+  <!-- JC_RTC_IRQ net label (above wire, red like VCC) -->
+  <text x="540" y="120" text-anchor="middle" class="netlabel">JC_RTC_IRQ</text>
+
+  <!-- =========== Annotations / signal flow arrows =========== -->
+
+  <!-- Signal flow label: active-low in -->
+  <text x="60" y="310" class="label" style="font-size:10px; fill:#555;">
+    <tspan x="40" dy="0">DS12885 IRQ: active-low, open-drain</tspan>
+    <tspan x="40" dy="14">→ Q1 inverts polarity</tspan>
+    <tspan x="40" dy="14">→ ISA IRQ: active-high, edge-triggered</tspan>
+  </text>
+
+  <!-- Legend box -->
+  <rect x="30" y="360" width="560" height="100" rx="6" fill="#f8f8f0" stroke="#ccc" stroke-width="1"/>
+  <text x="40" y="380" class="label" style="font-weight:bold;">Signal Flow:</text>
+  <text x="40" y="398" class="label" style="font-size:10px;">
+    <tspan x="50" dy="0">Idle (no interrupt): DS12885 IRQ = HIGH (R1 pull-up) → Q1 ON → Collector LOW → ISA IRQ LOW ✓</tspan>
+    <tspan x="50" dy="16">Interrupt active:   DS12885 IRQ = LOW (open-drain) → Q1 OFF → Collector HIGH (R3) → R4 → ISA IRQ HIGH ✓</tspan>
+  </text>
+  <text x="40" y="440" class="label" style="font-size:10px; fill:#666;">
+    <tspan x="50" dy="0">R4 (330Ω) contention protection: worst-case ≈ (3.5V − 0.2V) / 330Ω ≈ 10mA</tspan>
+  </text>
+</svg>
