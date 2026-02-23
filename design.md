@@ -17,7 +17,7 @@
 |---|---|---|---|
 | COM1 | 0x3F8-0x3FF | 0x2F8-0x2FF | 8 bytes |
 | COM2 | 0x3E8-0x3EF | 0x2E8-0x2EF | 8 bytes |
-| PRN (LPT1) | 0x378-0x37F | 0x278-0x27F (LPT2) | 8 bytes |
+| PRN  | 0x378-0x37F (LPT1) | 0x278-0x27F (LPT2) | 8 bytes |
 | RTC | 0x70-0x71 | (fixed) | 2 bytes |
 
 ### Address Bit Patterns (A9..A0)
@@ -82,13 +82,14 @@ A single jumper wire connects Pin 1 to one of Pins 2–5.
 
 | Jumper | Type | Pins | Function |
 |---|---|---|---|
-| JP_COM1_ADDR | 3-pin header | 1=VCC, 2=J_COM1, 3=GND | Cap 1-2: 0x3F8 (COM1), Cap 2-3: 0x2F8 (COM2) |
-| JP_COM1_IRQ | 3-pin header | 1=IRQ4, 2=COM1_IRQ, 3=IRQ3 | Select IRQ |
-| JP_COM2_ADDR | 3-pin header | 1=VCC, 2=J_COM2, 3=GND | Cap 1-2: 0x3E8 (COM3), Cap 2-3: 0x2E8 (COM4) |
-| JP_COM2_IRQ | 3-pin header | 1=IRQ4, 2=COM2_IRQ, 3=IRQ3 | Select IRQ |
-| JP_PRN_ADDR | 3-pin header | 1=VCC, 2=J_PRN, 3=GND | Cap 1-2: 0x378 (LPT1), Cap 2-3: 0x278 (LPT2) |
-| JP_PRN_IRQ | 3-pin header | 1=IRQ7, 2=PRN_IRQ, 3=IRQ5 | Select IRQ |
-| JP_RTC_IRQ | 1×5 header | 1=RTC_IRQ_OUT, 2=IRQ2/9, 3=IRQ5, 4=IRQ6, 5=IRQ7 | Jumper wire Pin1 to one of Pin2–5 |
+| J1 (COM1 Addr) | 3-pin header | 1=VCC, 2=J_COM1, 3=GND | Cap 1-2: 0x3F8 (COM1), Cap 2-3: 0x2F8 (COM2) |
+| J2 (COM1 IRQ) | 3-pin header | 1=IRQ4, 2=COM1_IRQ, 3=IRQ3 | Select IRQ |
+| J3 (COM2 Addr) | 3-pin header | 1=VCC, 2=J_COM2, 3=GND | Cap 1-2: 0x3E8 (COM3), Cap 2-3: 0x2E8 (COM4) |
+| J4 (COM2 IRQ) | 3-pin header | 1=IRQ4, 2=COM2_IRQ, 3=IRQ3 | Select IRQ |
+| J5 (PRN Addr) | 3-pin header | 1=VCC, 2=J_PRN, 3=GND | Cap 1-2: 0x378 (LPT1), Cap 2-3: 0x278 (LPT2) |
+| J6 (PRN IRQ) | 3-pin header | 1=IRQ7, 2=PRN_IRQ, 3=IRQ5 | Select IRQ |
+| J7 (RTC IRQ) | 1×5 header | 1=RTC_IRQ_OUT, 2=IRQ2/9, 3=IRQ5, 4=IRQ6, 5=IRQ7 | Jumper wire Pin1 to one of Pin2–5 |
+| J8 (CMOS Clear) | 2-pin header | 1=RCLR#, 2=GND | Short momentarily (power off) to clear CMOS RAM |
 
 ### 3.4 Device Enable/Disable
 
@@ -96,7 +97,7 @@ Devices are enabled/disabled by installing or removing the chip from its DIP soc
 
 **Address jumper wiring (3-pin header):**
 
-All three address jumpers (JP_COM1_ADDR, JP_COM2_ADDR, JP_PRN_ADDR) follow the same scheme:
+All three address jumpers (J1, J3, J5) follow the same scheme:
 
 ```
   Pin 1 = VCC
@@ -166,12 +167,12 @@ Intel bus timing mode is selected by leaving MOT pin unconnected (internal 20k p
 | DS# | Data strobe | RTC_DS# from ATF22V10 — active-low, fires only during IN from port 0x71 |
 | WR# | Write strobe | RTC_WR# from ATF22V10 — active-low, fires only during OUT to port 0x71 |
 | RESET | Reset | Tie to VCC (per datasheet: allows power-fail transitions without clearing control registers) |
-| IRQ | Interrupt out | Open-drain, inverted via NPN transistor (Q1) to active-high; output via R4 (330Ω) to jumper JP_RTC_IRQ selecting IRQ2/9, IRQ5, IRQ6, or IRQ7 (see Section 6) |
+| IRQ | Interrupt out | Open-drain, inverted via NPN transistor (Q1) to active-high; output via R4 (330Ω) to jumper J7 selecting IRQ2/9, IRQ5, IRQ6, or IRQ7 (see Section 6) |
 | SQW | Square wave | Leave unconnected or route to test point |
 | X1, X2 | Crystal | 32.768 kHz crystal (Y1) |
 | VCC | Power | +5V from ISA bus |
 | VBAT | Backup battery | CR2032 (3V) via battery holder |
-| RCLR | RAM clear | Tie to VCC via 10k pull-up (or add a push-button to GND for manual RAM clear) |
+| RCLR | RAM clear | Internal pull-up; 2-pin header J8 to GND for manual CMOS clear |
 
 ### 5.3 Multiplexed Address/Data Bus — Address Latch Mechanism
 
@@ -205,7 +206,44 @@ For a **write to port 0x71** (write RTC register data):
 3. IOW# goes LOW → ATF22V10 asserts RTC_WR# LOW (address match + A0=1 + IOW# active) → DS12885 WR# goes LOW
 4. IOW# goes HIGH → RTC_WR# goes HIGH → WR# rising edge → DS12885 latches AD0-AD7 as write data
 
-### 5.5 Address Latch Integrity Between Bus Cycles
+### 5.5 Intel Mode Timing Diagram
+
+**Write to port 0x70 — Set RTC register address:**
+
+```
+  Signals during OUT 0x70, <reg_addr>:
+
+  A0 ──────┐                              ┌─────
+           └──────────────────────────────┘
+  CS# ──┐                                ┌────
+        └────────────────────────────────┘
+  R/W ────────────┐             ┌─────────────
+  (IOW#)          └─────────────┘
+  AD0-7           ╔═══════reg_addr════════╗
+  (via 74245)     ╚═══════════════════════╝
+  AS ───────────────┐       ┌──────────────────
+  (RTC_AS)          └───────┘
+                    ▲       ▲
+                    │ IOW#  │ IOW# returns HIGH
+                    │ goes  │ → AS falls
+                    │ LOW   │ → latch freezes
+                    │ → AS  │   reg_addr captured
+                    │ HIGH  │
+                    │ latch │
+                    │ opens │
+```
+
+### 5.6 Timing Compliance (from DS12885 AC specifications)
+
+| Parameter | Symbol | Min | Our design meets? |
+|-----------|--------|-----|-------------------|
+| AS high pulse width | PWASH | 60 ns | Yes — AS=HIGH for IOW# pulse width (~350 ns on ISA) |
+| Address valid before AS fall | tASL | 30 ns | Yes — data bus is stable before IOW# returns HIGH |
+| Address hold after AS fall | tAHL | 10 ns | Yes — 74245 disable propagates through PLD (~15 ns), bus hold capacitance maintains data |
+| AS fall to DS#/WR# assertion | tASED | 40 ns | Yes — AS falls at end of port 0x70 cycle; DS#/WR# asserts at start of port 0x71 cycle (≥200 ns apart at 4.77 MHz) |
+| CS setup before DS# or WR# | tCS | 20 ns | Yes — CS# is permanently GND; always satisfied |
+
+### 5.7 Address Latch Integrity Between Bus Cycles
 
 Since RTC_AS is gated with IOW# and the full RTC address decode, the DS12885 address latch opens **only** during the IOW# pulse of an `OUT 70h` instruction. Between bus cycles, RTC_AS stays LOW and the address latch remains frozen — no corruption is possible.
 
@@ -340,7 +378,7 @@ G# (BUF_EN#) is active low. The 74245 is enabled only when a device on this card
               └──┬───┘ └──┬───┘ └──┬───┘ └────┬────┘   │       │  │
                  │IRQ     │IRQ    │IRQ        │IRQ     │       │  │
                  │        │       │           │        │       │  │
-              [JP_IRQ] [JP_IRQ] [JP_IRQ]  [JP_IRQ]    │       │  │
+              [J2]    [J4]    [J6]      [J7]        │       │  │
                  └────────┴───────┴───────────┴────────┘       │  │
                                                     To ISA IRQ lines
 ```

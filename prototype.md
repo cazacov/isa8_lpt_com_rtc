@@ -1,4 +1,4 @@
-# ISA8 RTC Prototype Board - Plan B
+# ISA8 Prototype Board - Test RTC signals decoding
 
 ## Goal
 
@@ -133,7 +133,7 @@ activates whenever any device address range is on the bus.
 | 18 | RESET | VCC (per datasheet: allows power-fail transitions without clearing control registers) |
 | 19 | IRQ | R1 (4.7k pull-up to VCC), then to JP1 pin 1 |
 | 20 | VBAT | BT1 positive (+3V CR2032) |
-| 21 | RCLR | 10k pull-up to VCC (or push-button to GND for manual RAM clear) |
+| 21 | RCLR | Internal pull-up; 2-pin header to GND for manual CMOS clear (optional on prototype) |
 | 22 | N.C. | No connection |
 | 23 | SQW | No connection (or route to test point) |
 | 24 | VCC | +5V |
