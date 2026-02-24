@@ -2,6 +2,13 @@
 
 An 8-bit ISA expansion card providing a parallel port, two serial ports, and a battery-backed real-time clock for retro PC/XT systems.
 
+The card was designed with a help of GitHub Copilot.
+
+## Prototype
+See [prototype.md](./prototype.md) - Learn how to decode address, control RTC chip and design GAL firmware.
+![Prototype](./_img/prototype.jpg)
+Vibe soldering with LLM.
+
 ## Features
 
 - **Parallel Port (PRN)** — UM82C11-C, DB-25 connector, Centronics-compatible
@@ -119,6 +126,7 @@ The RTC is always enabled (no disable mechanism).
 ### Required Software
 
 - [KiCad](https://www.kicad.org/) 9.0 or later
+- [GALasm](https://github.com/daveho/GALasm) to compile firmware
 - A PLD programmer (e.g. TL866II+) for the ATF22V10
 - Git
 
