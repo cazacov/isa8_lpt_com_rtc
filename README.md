@@ -112,7 +112,7 @@ The RTC is always enabled (no disable mechanism).
 - **Solder mask / silkscreen:** any color; white silkscreen on top
 - **Components:** through-hole
 - **Form factor:** standard ISA 8-bit card dimensions
-- **Connectors:** bracket-mounted DB-25 and DB-9; CR2032 battery holder
+- **Connectors:** bracket-mounted DB-25 and DE-9; CR2032 battery holder
 
 ## Getting Started
 
